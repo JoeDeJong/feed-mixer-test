@@ -1,0 +1,11 @@
+{
+  "name": "feed-mixer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Guided TMR mixer wagon loading for a tablet in the wheel loader cab",
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "test": "node --test"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "Feed Mixer",
+  "short_name": "Feed Mixer",
+  "description": "Guided TMR mixer wagon loading with live scale readout",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#14181d",
+  "theme_color": "#14181d",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

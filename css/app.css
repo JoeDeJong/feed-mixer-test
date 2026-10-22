@@ -1,0 +1,415 @@
+:root {
+  --bg: #14181d;
+  --panel: #1f252c;
+  --line: #333c46;
+  --text: #f2f4f6;
+  --muted: #9aa5b1;
+  --accent: #f5b301;
+  --ok: #22c55e;
+  --over: #ef4444;
+  --under: #3b82f6;
+  --warn: #f59e0b;
+  --radius: 10px;
+  color-scheme: dark;
+}
+
+/* Dark first (easier on the eyes at night in the cab); light follows the
+   device setting, or an explicit data-theme="light" on the root element. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f4f5f7;
+    --panel: #ffffff;
+    --line: #d5dae0;
+    --text: #111418;
+    --muted: #5b6672;
+    --accent: #b77f00;
+    --ok: #15803d;
+    --over: #c81e1e;
+    --under: #1d4ed8;
+    --warn: #b45309;
+    color-scheme: light;
+  }
+}
+
+:root[data-theme="light"] {
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --line: #d5dae0;
+  --text: #111418;
+  --muted: #5b6672;
+  --accent: #b77f00;
+  --ok: #15803d;
+  --over: #c81e1e;
+  --under: #1d4ed8;
+  --warn: #b45309;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 17px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Paint the strip above the sticky header on phones with a notch. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto;
+  height: env(safe-area-inset-top, 0px);
+  z-index: 10;
+  background: var(--panel);
+}
+
+header {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-block: 8px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.brand { font-weight: 800; color: var(--accent); text-decoration: none; white-space: nowrap; }
+
+nav { display: flex; gap: 4px; overflow-x: auto; flex: 1; scrollbar-width: none; }
+nav a {
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: var(--muted);
+  text-decoration: none;
+  white-space: nowrap;
+}
+nav a.active { background: var(--bg); color: var(--text); font-weight: 600; }
+
+.scale { display: flex; align-items: center; gap: 6px; color: var(--text); text-decoration: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.scale { flex: none; }
+/* Fixed-width slot so a flickering reading ("1" / "-1" / "16,480") never
+   changes the header's size and shifts the buttons below it. */
+.scale b { display: inline-block; min-width: 7ch; text-align: right; font-size: 1.2em; }
+.tag { font-size: 11px; font-weight: 700; color: var(--accent); }
+
+.dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.connected { background: var(--ok); }
+.dot.connecting, .dot.stale { background: var(--accent); }
+.dot.error { background: var(--over); }
+
+main {
+  max-width: 900px;
+  margin: 0 auto;
+  padding-block: 16px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+h2 { margin: 8px 0 12px; }
+h3 { margin: 0 0 12px; }
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.banner { border-color: var(--accent); }
+
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
+.grow { flex: 1; width: 100%; }
+.nowrap { white-space: nowrap; }
+.hint { color: var(--muted); font-size: 15px; }
+.warn { color: var(--accent); font-weight: 600; }
+
+.form { display: grid; gap: 12px; margin-bottom: 12px; }
+label { display: grid; gap: 4px; color: var(--muted); font-size: 15px; }
+label.check { display: flex; align-items: center; gap: 10px; color: var(--text); font-size: 17px; }
+label.check input { width: 24px; height: 24px; }
+label.inline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--text); font-size: 16px; margin-bottom: 8px; }
+label.inline input { width: 76px; text-align: right; }
+
+input, select {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  min-height: 48px;
+  width: 100%;
+}
+input:focus, select:focus, .btn:focus-visible, nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.title-input { font-weight: 700; font-size: 1.15em; }
+
+.btn {
+  font: inherit;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+}
+.btn:active { transform: translateY(1px); }
+.btn[disabled] { opacity: 0.4; pointer-events: none; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #111; }
+.btn.danger { color: var(--over); }
+.btn.danger-fill { background: var(--over); border-color: var(--over); color: #fff; }
+
+/* ---- users and PIN sign-in ---- */
+
+.narrow { max-width: 440px; margin-inline: auto; }
+
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.user-chip { min-width: 0; max-width: 100%; }
+.user-chip b { overflow: hidden; text-overflow: ellipsis; }
+.user-chip span { color: var(--muted); font-size: 13px; }
+
+.user-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+
+.pin-card { text-align: center; }
+.pin-dots { display: flex; justify-content: center; gap: 14px; margin: 8px 0; }
+.pin-dots span { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--muted); }
+.pin-dots span.on { background: var(--accent); border-color: var(--accent); }
+.pin-msg { min-height: 1.4em; margin: 4px 0 8px; }
+.keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
+.keypad .btn { min-height: 72px; font-size: 28px; }
+
+.users-table small { display: block; margin-top: 2px; }
+
+/* ---- dashboard ---- */
+
+.muted { color: var(--muted); }
+.ration-cost { margin: 4px 0 12px; font-weight: 600; }
+
+.dash-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.dash-head h2 { margin: 0; }
+.dash-head .segmented { flex: 1 1 320px; max-width: 480px; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.tile { display: grid; gap: 4px; align-content: start; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+.tile > span { color: var(--muted); font-size: 14px; }
+.tile b { font-size: 28px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.tile small { color: var(--muted); font-size: 13px; }
+
+.pill { display: inline-block; min-width: 3.2em; padding: 2px 10px; border-radius: 999px; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); background: color-mix(in srgb, var(--muted) 18%, transparent); }
+.pill.good { background: color-mix(in srgb, var(--ok) 22%, transparent); }
+.pill.fair { background: color-mix(in srgb, var(--warn) 24%, transparent); }
+.pill.poor { background: color-mix(in srgb, var(--over) 24%, transparent); }
+.tile .pill { font-size: 24px; padding: 2px 12px; }
+
+.chart-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.chart-head h3 { margin: 0; }
+.segmented.small button { min-height: 40px; padding: 0 14px; font-size: 15px; }
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .baseline { stroke: var(--muted); stroke-width: 1; }
+.chart .axis { fill: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.chart .bar { fill: var(--accent); }
+.chart .bar.active { fill: var(--text); }
+.chart .hit { fill: transparent; cursor: pointer; }
+.chart-tip {
+  position: absolute;
+  top: 0;
+  transform: translate(-50%, -100%);
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.table-scroll { overflow-x: auto; }
+.table-scroll table { min-width: 480px; }
+.table-scroll td small { color: var(--muted); }
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 0.55);
+}
+.modal-box {
+  width: min(440px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+.modal-box p { margin: 0 0 12px; font-size: 1.1em; font-weight: 600; }
+.modal-box .row { justify-content: flex-end; margin-bottom: 0; }
+.modal-box input { font-size: 1.4em; }
+.btn.small { min-height: 40px; padding: 6px 12px; }
+.btn.big { font-size: 1.2em; min-height: 60px; }
+.btn.huge { width: 100%; font-size: 1.6em; min-height: 88px; margin: 16px 0 4px; }
+
+.segmented { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.segmented button { flex: 1; font: inherit; min-height: 48px; border: 0; background: var(--bg); color: var(--muted); cursor: pointer; }
+.segmented button.on { background: var(--accent); color: #111; font-weight: 700; }
+
+table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+th, td { padding: 6px 6px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+th { color: var(--muted); font-weight: 600; font-size: 14px; }
+tfoot td { font-weight: 700; border-bottom: 0; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+td.num input { text-align: right; max-width: 110px; margin-left: auto; display: block; }
+td .ok, .ok { color: var(--ok); }
+td .over, .over { color: var(--over); }
+td .under, .under { color: var(--under); }
+
+details summary { display: flex; justify-content: space-between; gap: 12px; cursor: pointer; list-style: none; flex-wrap: wrap; }
+details summary::-webkit-details-marker { display: none; }
+details[open] summary { margin-bottom: 8px; }
+
+.status-line { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-weight: 600; }
+.rawlog {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  min-height: 80px;
+  max-height: 240px;
+  overflow: auto;
+  font-size: 14px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* ---- guided loading screen: readable at arm's length in a moving cab ---- */
+
+.loading { --state: var(--under); }
+.loading[data-status="ok"] { --state: var(--ok); }
+.loading[data-status="over"] { --state: var(--over); }
+
+.step-meta { color: var(--muted); font-size: 16px; }
+.scale-warn { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scale-warn.off { visibility: hidden; }
+.ing-name { font-size: clamp(32px, 7vw, 56px); margin: 4px 0 8px; line-height: 1.1; }
+
+/* Number and label each keep their own fixed line, so the Done button
+   below never moves while the reading changes. */
+.remaining {
+  display: flex;
+  flex-direction: column;
+  white-space: nowrap;
+  color: var(--state);
+  font-variant-numeric: tabular-nums;
+}
+.remaining span { font-size: clamp(72px, 20vw, 160px); font-weight: 800; line-height: 1; }
+.remaining small { font-size: clamp(20px, 4vw, 32px); font-weight: 700; }
+
+.bar { position: relative; height: 28px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; margin: 16px 0; }
+.bar .fill { height: 100%; width: 0; background: var(--state); transition: width 0.2s linear; }
+@media (prefers-reduced-motion: reduce) { .bar .fill { transition: none; } }
+.bar .target-mark { position: absolute; top: 0; bottom: 0; left: calc(100% / 1.1); width: 3px; background: var(--text); }
+
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.stats div { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+.stats span { display: block; color: var(--muted); font-size: 14px; }
+.stats b { font-size: clamp(20px, 4.5vw, 32px); font-variant-numeric: tabular-nums; }
+
+.manual { margin-top: 12px; }
+.manual input { font-size: 28px; min-height: 64px; }
+
+.steps { list-style: none; padding: 0; margin: 16px 0 0; }
+.steps li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 4px; border-bottom: 1px solid var(--line); color: var(--muted); font-variant-numeric: tabular-nums; }
+.steps li.current { color: var(--text); font-weight: 700; }
+.steps li.done { text-decoration: line-through; opacity: 0.6; }
+
+/* While loading, keep the header small so the numbers get the space. */
+body.is-loading nav { display: none; }
+body.is-loading header { justify-content: space-between; }
+
+@media (max-width: 600px) {
+  /* Two fixed rows that never wrap: user + scale, then the tabs. The
+     name gets "…" if it is too long. The brand is left out to make room;
+     the Load tab goes to the same place. */
+  header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; }
+  .brand { display: none; }
+  .user-chip { justify-self: start; }
+  nav { grid-column: 1 / -1; grid-row: 2; }
+  header:has(.user-chip[hidden]) .scale { grid-column: 2; }
+  th, td { padding: 6px 3px; }
+  td.num input { min-width: 64px; padding: 10px 6px; }
+  .btn.small { min-width: 36px; padding: 6px 8px; }
+
+  /* Ingredients: full name on its own line, price and Delete below. */
+  .ingredients-table, .ingredients-table tbody { display: block; }
+  .ingredients-table thead { display: none; }
+  .ingredients-table tr { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .ingredients-table td { border: 0; padding: 0; min-width: 0; }
+  .ingredients-table td:first-child { grid-column: 1 / -1; }
+  .ingredients-table td.num input { width: 110px; margin: 0; }
+  .ingredients-table td.num::after { content: "$ / ton"; color: var(--muted); font-size: 14px; }
+  .ingredients-table td.num { display: flex; align-items: center; gap: 8px; grid-column: 1 / 3; }
+  .tile b { font-size: 24px; }
+
+  /* Users: name on its own line, role and buttons below. */
+  .users-table, .users-table tbody { display: block; }
+  .users-table thead { display: none; }
+  .users-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .users-table td { border: 0; padding: 0; min-width: 0; }
+  .users-table td:first-child { grid-column: 1 / -1; }
+
+
+  /* Ration editor: give each ingredient its own two-line block so long
+     names like "Corn Silage 10.10.26" stay readable. */
+  .ration-table, .ration-table tbody, .ration-table tfoot { display: block; }
+  .ration-table thead { display: none; }
+  .ration-table tr {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    grid-template-areas: "n ing ing" "n lbs btns";
+    gap: 6px 8px;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .ration-table td { border: 0; padding: 0; min-width: 0; }
+  .ration-table td:nth-child(1) { grid-area: n; align-self: start; padding-top: 12px; }
+  .ration-table td:nth-child(2) { grid-area: ing; }
+  .ration-table td:nth-child(3) { grid-area: lbs; display: flex; align-items: center; gap: 8px; }
+  .ration-table td:nth-child(4) { grid-area: btns; }
+  .ration-table tbody td:nth-child(3)::after { content: "lb"; color: var(--muted); font-size: 14px; white-space: nowrap; }
+  .ration-table td.num input { flex: none; width: 104px; max-width: none; margin: 0; padding: 10px 8px; }
+  .ration-table tfoot tr { grid-template-areas: "n ing lbs"; border-bottom: 0; }
+  .ration-table tfoot td:nth-child(3) { grid-area: lbs; }
+  .ration-table tfoot td:nth-child(4) { display: none; }
+}
