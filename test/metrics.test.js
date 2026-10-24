@@ -16,7 +16,7 @@ test('itemCost uses as-fed $/ton and is null without a price', () => {
 
 test('rationCostPerHeadDay adds priced ingredients and lists unpriced ones', () => {
   const ingredients = [{ id: 'a', name: 'Hay', costPerTon: 200 }, { id: 'b', name: 'Corn', costPerTon: null }];
-  const r = rationCostPerHeadDay({ items: [{ ingredientId: 'a', lbsPerHead: 10 }, { ingredientId: 'b', lbsPerHead: 5 }] }, ingredients);
+  const r = rationCostPerHeadDay({ items: [{ ingredientId: 'a', dmLbsPerHead: 10 }, { ingredientId: 'b', dmLbsPerHead: 5 }] }, ingredients);
   assert.equal(r.cost, 1);
   assert.deepEqual(r.missing, ['Corn']);
 });

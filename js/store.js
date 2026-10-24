@@ -19,13 +19,19 @@ export const defaultSettings = {
   parserDivisor: 1,
 };
 
-// Bump when the built-in rations change, so devices that still hold the
-// earlier built-in set pick up the new one (their history and settings stay).
-const SEED_VERSION = 2;
+// Bump when the built-in data changes. Version 2 added the farm rations;
+// version 3 moved rations to dry-matter amounts and added DM % per ingredient.
+const SEED_VERSION = 3;
+
+// DM % from the nutritionist's feeding sheets.
+const SHEET_DM = {
+  'alf-z': 90, 'alf-zg': 90, straw: 90, pvm: 91.3847, 'cu-grain': 92.718, zelit: 93,
+  canola: 90, earlage: 53.47, grass: 39.07, 'cs-1010': 36.64, 'cs-0630': 35.41, molasses: 68.13,
+};
 
 export function defaultData() {
-  const ing = (id, name) => ({ id, name });
-  const item = (ingredientId, lbsPerHead) => ({ ingredientId, lbsPerHead });
+  const ing = (id, name) => ({ id, name, dmPct: SHEET_DM[id], costPerTon: null });
+  const item = (ingredientId, dmLbsPerHead) => ({ ingredientId, dmLbsPerHead });
   return {
     seedVersion: SEED_VERSION,
     ingredients: [
@@ -42,7 +48,7 @@ export function defaultData() {
       ing('cs-0630', 'Corn Silage 6.30.26'),
       ing('molasses', 'Molasses 42 Blend'),
     ],
-    // As-fed lb per head per day and feeding % from the nutritionist's
+    // Dry-matter lb per head per day and feeding % from the nutritionist's
     // feeding sheets; items are in loading order.
     rations: [
       {
@@ -50,8 +56,8 @@ export function defaultData() {
         name: 'Holstein Cows – 10/12/26',
         feedingPct: 50,
         items: [
-          item('alf-z', 2.222), item('pvm', 8.3579), item('canola', 8.054),
-          item('earlage', 13.131), item('grass', 27.023), item('cs-1010', 50.328),
+          item('alf-z', 2.0), item('pvm', 7.6378), item('canola', 7.249),
+          item('earlage', 7.021), item('grass', 10.558), item('cs-1010', 18.44),
         ],
       },
       {
@@ -59,8 +65,8 @@ export function defaultData() {
         name: 'Mature Jerseys – 10/12/26',
         feedingPct: 100,
         items: [
-          item('alf-z', 2.666), item('pvm', 8.7542), item('canola', 5.0),
-          item('earlage', 8.977), item('grass', 24.487), item('cs-1010', 35.699),
+          item('alf-z', 2.4), item('pvm', 8.0), item('canola', 4.5),
+          item('earlage', 4.8), item('grass', 9.567), item('cs-1010', 13.08),
         ],
       },
       {
@@ -68,8 +74,8 @@ export function defaultData() {
         name: '1st Lact. Jerseys – 10/12/26',
         feedingPct: 100,
         items: [
-          item('alf-z', 2.0), item('pvm', 8.8019), item('canola', 5.088),
-          item('earlage', 10.61), item('grass', 20.673), item('cs-1010', 32.151),
+          item('alf-z', 1.8), item('pvm', 8.0436), item('canola', 4.579),
+          item('earlage', 5.673), item('grass', 8.077), item('cs-1010', 11.78),
         ],
       },
       {
@@ -77,9 +83,9 @@ export function defaultData() {
         name: 'Closeups – 9/30/26',
         feedingPct: 200,
         items: [
-          item('straw', 4.444), item('alf-zg', 3.999), item('zelit', 0.99983),
-          item('cu-grain', 1.4997), item('canola', 3.349), item('earlage', 2.201),
-          item('cs-0630', 27.897), item('molasses', 2.0),
+          item('straw', 3.999), item('alf-zg', 3.599), item('zelit', 0.92984),
+          item('cu-grain', 1.3905), item('canola', 3.014), item('earlage', 1.177),
+          item('cs-0630', 9.878), item('molasses', 1.362),
         ],
       },
     ],
@@ -107,6 +113,20 @@ export function normalize(raw) {
       rations: base.rations,
       pens: base.pens,
     });
+  } else if (raw.seedVersion < 3) {
+    // Rations were stored as as-fed lb. Give each ingredient its sheet DM %
+    // (or 100% if it isn't one of ours) and convert the amounts to dry matter,
+    // so every load comes out exactly as before.
+    data.ingredients = raw.ingredients.map((i) => ({ ...i, dmPct: i.dmPct ?? SHEET_DM[i.id] ?? 100 }));
+    const dmById = new Map(data.ingredients.map((i) => [i.id, i.dmPct]));
+    data.rations = raw.rations.map((r) => ({
+      ...r,
+      items: r.items.map(({ lbsPerHead, ...it }) => ({
+        ...it,
+        dmLbsPerHead: it.dmLbsPerHead ?? (Number(lbsPerHead) || 0) * ((dmById.get(it.ingredientId) ?? 100) / 100),
+      })),
+    }));
+    data.seedVersion = SEED_VERSION;
   }
   return data;
 }

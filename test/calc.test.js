@@ -8,16 +8,16 @@ const ingredients = [{ id: 'a', name: 'Hay' }, { id: 'b', name: 'Corn' }, { id: 
 const ration = {
   name: 'Test',
   items: [
-    { ingredientId: 'a', lbsPerHead: 4 },
-    { ingredientId: 'b', lbsPerHead: 12.5 },
-    { ingredientId: 'c', lbsPerHead: 0 },
+    { ingredientId: 'a', dmLbsPerHead: 4 },
+    { ingredientId: 'b', dmLbsPerHead: 12.5 },
+    { ingredientId: 'c', dmLbsPerHead: 0 },
   ],
 };
 
 test('batchTargets scales by head count, skipping zero-amount ingredients', () => {
   assert.deepEqual(batchTargets(ration, ingredients, { headCount: 100 }), [
-    { ingredientId: 'a', name: 'Hay', target: 400, costPerTon: null },
-    { ingredientId: 'b', name: 'Corn', target: 1250, costPerTon: null },
+    { ingredientId: 'a', name: 'Hay', target: 400, costPerTon: null, dmPct: 100 },
+    { ingredientId: 'b', name: 'Corn', target: 1250, costPerTon: null, dmPct: 100 },
   ]);
 });
 
@@ -28,7 +28,7 @@ test('batchTargets scales to a total batch weight in proportion', () => {
 
 test('batchTargets handles an empty ration and a deleted ingredient', () => {
   assert.deepEqual(batchTargets({ items: [] }, ingredients, { totalLbs: 1000 }), []);
-  const t = batchTargets({ items: [{ ingredientId: 'zz', lbsPerHead: 1 }] }, ingredients, { headCount: 5 });
+  const t = batchTargets({ items: [{ ingredientId: 'zz', dmLbsPerHead: 1 }] }, ingredients, { headCount: 5 });
   assert.equal(t[0].name, '(deleted ingredient)');
 });
 

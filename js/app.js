@@ -1,8 +1,9 @@
 import * as store from './store.js';
 import {
-  advance, batchTargets, currentStep, finishSession, goBack, itemCost, netLoaded, newId,
-  rationCostPerHeadDay, startSession, stepStatus, sum, tolerance,
+  advance, asFedLbs, batchTargets, currentStep, dmLbs, dmPctOf, finishSession, goBack, itemAsFed,
+  itemCost, netLoaded, newId, rationCostPerHeadDay, rationTotals, startSession, stepStatus, sum, tolerance,
 } from './calc.js';
+import { icon } from './icons.js';
 import { PERIODS, summarize } from './metrics.js';
 import { loadsToCsv } from './csv.js';
 import { SCALE_TYPES, ScaleConnection } from './scale.js';
@@ -116,18 +117,42 @@ const pinField = (id, label) =>
 const roleOptions = (selected) =>
   Object.entries(ROLES).map(([k, v]) => `<option value="${k}" ${k === selected ? 'selected' : ''}>${v}</option>`).join('');
 
+const pageHead = (title, desc = '', actions = '') => `
+  <div class="page-head">
+    <div class="page-title"><h1>${title}</h1>${desc ? `<p>${desc}</p>` : ''}</div>
+    ${actions ? `<div class="page-actions">${actions}</div>` : ''}
+  </div>`;
+
+// Number input with its unit shown inside the box ("lb", "%", "$/ton").
+const unitInput = (attrs, unit, value) =>
+  `<span class="unit-input"><input type="number" ${attrs} value="${esc(value ?? '')}"><span class="unit">${unit}</span></span>`;
+
+const iconBtn = (name, action, attrs = '', label = '', extra = '') =>
+  `<button class="icon-btn ${extra}" data-action="${action}" ${attrs} aria-label="${label}" title="${label}">${icon(name, 18)}</button>`;
+
+const initials = (name) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
+const avatar = (name, big = false) => `<span class="avatar ${big ? 'lg' : ''}">${esc(initials(name))}</span>`;
+const brandMark = () => `<span class="brand-mark">${icon('mixer', 22)}</span>`;
+
+const fmt2 = (n) => (Math.round(n * 100) / 100).toLocaleString('en-US', { maximumFractionDigits: 2 });
+// Value for an editable amount: up to 4 decimals, no trailing zeros.
+const amount = (n) => String(Math.round(n * 10000) / 10000);
+
 const views = {
   setup() {
     return `
-      <div class="card narrow">
-        <h2>Set up the first manager</h2>
-        <p class="hint">Managers add users and change rations, pens and settings. Operators can load and see history. You can add more people after this.</p>
-        <div class="form">
-          <label>Name<input id="setup-name" autocomplete="off"></label>
-          ${pinField('setup-pin', 'PIN (4–6 digits)')}
-          ${pinField('setup-pin2', 'PIN again')}
+      <div class="auth">
+        <div class="auth-brand">${brandMark()}<span>Feed Mixer</span></div>
+        <div class="card">
+          <h1 class="auth-title">Set up the first manager</h1>
+          <p class="hint">Managers add users and change rations, ingredients, pens and settings. Operators load and see history. You can add more people after this.</p>
+          <div class="form">
+            <label>Name<input id="setup-name" autocomplete="off"></label>
+            ${pinField('setup-pin', 'PIN (4–6 digits)')}
+            ${pinField('setup-pin2', 'PIN again')}
+          </div>
+          <button class="btn primary block lg" data-action="create-first">Create manager</button>
         </div>
-        <button class="btn primary big" data-action="create-first">Create manager</button>
       </div>`;
   },
 
@@ -135,55 +160,62 @@ const views = {
     const sel = byId(data.users, pinEntry.userId) ?? (data.users.length === 1 ? data.users[0] : null);
     if (!sel) {
       return `
-        <div class="card narrow">
-          <h2>Who is loading?</h2>
-          <div class="user-grid">
-            ${data.users.map((u) => `<button class="btn big" data-action="pick-user" data-id="${u.id}">${esc(u.name)}</button>`).join('')}
+        <div class="auth">
+          <div class="auth-brand">${brandMark()}<span>Feed Mixer</span></div>
+          <div class="card">
+            <h1 class="auth-title">Who is loading?</h1>
+            <div class="user-list">
+              ${data.users.map((u) => `<button class="user-tile" data-action="pick-user" data-id="${u.id}">
+                ${avatar(u.name)}<span><b>${esc(u.name)}</b><small>${ROLES[u.role]}</small></span>${icon('next', 18)}</button>`).join('')}
+            </div>
           </div>
         </div>`;
     }
     pinEntry.userId = sel.id;
     const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
     return `
-      <div class="card narrow pin-card">
-        <h2>${esc(sel.name)}</h2>
-        <p class="hint">Enter your PIN</p>
-        <div class="pin-dots" data-live="pin-dots">${pinDots()}</div>
-        <p class="warn pin-msg" data-live="pin-msg">${esc(pinEntry.error)}</p>
-        <div class="keypad">
-          ${keys.map((k) => `<button class="btn" data-action="pin-key" data-key="${k}">${k}</button>`).join('')}
-          <button class="btn" data-action="pin-back" aria-label="Delete digit">⌫</button>
-          <button class="btn" data-action="pin-key" data-key="0">0</button>
-          <button class="btn primary" data-action="pin-ok">OK</button>
+      <div class="auth">
+        <div class="card pin-card">
+          ${avatar(sel.name, true)}
+          <h1 class="auth-title">${esc(sel.name)}</h1>
+          <p class="hint">Enter your PIN</p>
+          <div class="pin-dots" data-live="pin-dots">${pinDots()}</div>
+          <p class="pin-msg" data-live="pin-msg">${esc(pinEntry.error)}</p>
+          <div class="keypad">
+            ${keys.map((k) => `<button class="key" data-action="pin-key" data-key="${k}">${k}</button>`).join('')}
+            <button class="key" data-action="pin-back" aria-label="Delete digit">${icon('backspace', 26)}</button>
+            <button class="key" data-action="pin-key" data-key="0">0</button>
+            <button class="key primary" data-action="pin-ok">OK</button>
+          </div>
+          ${data.users.length > 1 ? `<button class="btn ghost" data-action="pick-user" data-id="">Not ${esc(sel.name)}? Switch user</button>` : ''}
         </div>
-        ${data.users.length > 1 ? `<button class="btn" data-action="pick-user" data-id="">Not ${esc(sel.name)}?</button>` : ''}
       </div>`;
   },
 
   users() {
-    return `<h2>Users</h2>
-      <div class="card">
+    return `${pageHead('Users', 'Everyone signs in with their own PIN. Managers can change rations, ingredients, pens and settings; operators load and see history.')}
+      <div class="card flush">
         <table class="users-table">
-          <thead><tr><th>Name</th><th>Role</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Role</th><th class="actions-col"></th></tr></thead>
           <tbody>
             ${data.users.map((u) => `<tr>
-              <td><input data-field="user.name" data-id="${u.id}" value="${esc(u.name)}" aria-label="Name">${u.id === user.id ? '<small class="hint">you</small>' : ''}</td>
+              <td><div class="name-cell">${avatar(u.name)}<input data-field="user.name" data-id="${u.id}" value="${esc(u.name)}" aria-label="Name">${u.id === user.id ? '<span class="badge">You</span>' : ''}</div></td>
               <td><select data-field="user.role" data-id="${u.id}" aria-label="Role">${roleOptions(u.role)}</select></td>
-              <td class="nowrap">
-                <button class="btn small" data-action="change-pin" data-id="${u.id}">Change PIN</button>
-                <button class="btn small danger" data-action="del-user" data-id="${u.id}" ${u.id === user.id ? 'disabled' : ''}>Delete</button>
+              <td class="actions-col">
+                <button class="btn small" data-action="change-pin" data-id="${u.id}">${icon('key', 16)}Change PIN</button>
+                ${iconBtn('trash', 'del-user', `data-id="${u.id}" ${u.id === user.id ? 'disabled' : ''}`, `Delete ${esc(u.name)}`, 'danger')}
               </td></tr>`).join('')}
           </tbody>
         </table>
       </div>
       <div class="card">
-        <h3>Add a user</h3>
-        <div class="form">
+        <h2 class="card-title">Add a user</h2>
+        <div class="form cols-3">
           <label>Name<input id="new-user-name" autocomplete="off"></label>
           ${pinField('new-user-pin', 'PIN (4–6 digits)')}
           <label>Role<select id="new-user-role">${roleOptions('operator')}</select></label>
         </div>
-        <button class="btn primary" data-action="add-user">Add user</button>
+        <button class="btn primary" data-action="add-user">${icon('plus', 18)}Add user</button>
       </div>`;
   },
 
@@ -191,70 +223,78 @@ const views = {
     if (data.activeLoad) {
       const s = data.activeLoad;
       return `
-        <div class="card banner">
-          <h2>Load in progress</h2>
-          <p>${esc(s.rationName)}${s.penName ? ` · ${esc(s.penName)}` : ''} — ingredient ${s.index + 1} of ${s.steps.length}</p>
-          <div class="row">
-            <a class="btn primary big" href="#" data-go="loading">Resume load</a>
-            <button class="btn danger" data-action="cancel-load">Discard load</button>
+        ${pageHead('Load in progress')}
+        <div class="card callout">
+          <div class="callout-icon">${icon('load', 24)}</div>
+          <div class="grow">
+            <b>${esc(s.rationName)}${s.penName ? ` · ${esc(s.penName)}` : ''}</b>
+            <p class="hint">Ingredient ${s.index + 1} of ${s.steps.length}: ${esc(currentStep(s).name)}</p>
           </div>
+        </div>
+        <div class="row">
+          <a class="btn primary lg" href="#" data-go="loading">Resume load</a>
+          <button class="btn ghost danger" data-action="cancel-load">Discard load</button>
         </div>`;
     }
     if (!data.rations.length) {
-      return `<div class="card"><h2>No rations yet</h2><p>Create a ration first.</p><a class="btn primary" href="#" data-go="rations">Go to rations</a></div>`;
+      return `${pageHead('Start a load')}<div class="card empty"><p>No rations yet. Create a ration first.</p><a class="btn primary" href="#" data-go="rations">Go to rations</a></div>`;
     }
     return `
+      ${pageHead('Start a load', 'Pick the pen, check the amounts, then start loading.')}
       <div class="card">
-        <h2>Start a load</h2>
-        <div class="form">
+        <div class="form cols-2">
           <label>Pen
-            <select data-draft="penId"><option value="">— none —</option>${options(data.pens, draft.penId, (p) => `${p.name} (${p.headCount} hd)`)}</select>
+            <select data-draft="penId"><option value="">— No pen —</option>${options(data.pens, draft.penId, (p) => `${p.name} (${p.headCount} hd)`)}</select>
           </label>
           <label>Ration
             <select data-draft="rationId">${options(data.rations, draft.rationId)}</select>
           </label>
-          <div class="segmented">
+        </div>
+        <div class="form cols-2">
+          <div class="segmented" role="group" aria-label="Size the load">
             <button class="${draft.mode === 'head' ? 'on' : ''}" data-action="mode" data-mode="head">By head count</button>
             <button class="${draft.mode === 'total' ? 'on' : ''}" data-action="mode" data-mode="total">By total weight</button>
           </div>
           ${draft.mode === 'head'
-            ? `<label>Head count <input type="number" inputmode="numeric" min="0" data-draft="headCount" value="${esc(draft.headCount)}"></label>`
-            : `<label>Total batch (lb) <input type="number" inputmode="numeric" min="0" step="100" data-draft="totalLbs" value="${esc(draft.totalLbs)}"></label>`}
+            ? unitInput(`inputmode="numeric" min="0" data-draft="headCount" aria-label="Head count"`, 'head', draft.headCount)
+            : unitInput(`inputmode="numeric" min="0" step="100" data-draft="totalLbs" aria-label="Total batch weight"`, 'lb', draft.totalLbs)}
         </div>
-        <div id="preview">${previewTable()}</div>
-      </div>`;
+      </div>
+      <div id="preview">${previewTable()}</div>`;
   },
 
   loading() {
     const s = data.activeLoad;
-    if (!s) return `<div class="card"><p>No load in progress.</p><a class="btn primary" href="#" data-go="home">Start a load</a></div>`;
+    if (!s) return `<div class="card empty"><p>No load in progress.</p><a class="btn primary" href="#" data-go="home">Start a load</a></div>`;
     const step = currentStep(s);
     const next = s.steps[s.index + 1];
     const manual = scale.type === 'manual';
     return `
       <section class="loading" id="loadview">
-        <div class="step-meta">Ingredient ${s.index + 1} of ${s.steps.length} · ${esc(s.rationName)}${s.penName ? ` · ${esc(s.penName)}` : ''}${s.headCount ? ` (${s.headCount} hd)` : ''}</div>
+        <div class="step-meta"><span class="step-count">${s.index + 1} / ${s.steps.length}</span><span>${esc(s.rationName)}${s.penName ? ` · ${esc(s.penName)}` : ''}${s.headCount ? ` · ${s.headCount} hd` : ''}</span></div>
         <h1 class="ing-name">${esc(step.name)}</h1>
-        <p class="warn scale-warn off" data-live="scale-warn">&nbsp;</p>
+        <p class="scale-warn off" data-live="scale-warn">&nbsp;</p>
         <div class="remaining"><span data-live="remaining">—</span><small data-live="remaining-label">lb to go</small></div>
         <div class="bar"><div class="fill" data-live="bar"></div><div class="target-mark"></div></div>
         <div class="stats">
           <div><span>Target</span><b>${fmt(step.target)}</b></div>
           <div><span>Loaded</span><b data-live="net">—</b></div>
-          <div><span>Mixer total</span><b data-live="gross">—</b></div>
+          <div><span>In mixer</span><b data-live="gross">—</b></div>
         </div>
-        ${manual ? `<label class="manual">Mixer scale reading (lb)
-          <input type="number" inputmode="numeric" data-manual value="${esc(scale.weight ?? '')}"></label>` : ''}
-        ${scale.simulator ? `<button class="btn" data-action="sim-bucket">Simulate a bucket</button>` : ''}
-        <button class="btn primary huge" data-action="next">${next ? `Done → ${esc(next.name)}` : 'Finish load'}</button>
-        <div class="row">
-          <button class="btn" data-action="back" ${s.index === 0 ? 'disabled' : ''}>◀ Back</button>
-          <button class="btn" data-action="skip">Skip</button>
-          <button class="btn danger" data-action="cancel-load">Cancel load</button>
+        ${manual ? `<label class="manual">Mixer scale reading
+          ${unitInput('inputmode="numeric" data-manual', 'lb', scale.weight ?? '')}</label>` : ''}
+        ${scale.simulator ? `<button class="btn" data-action="sim-bucket">${icon('bucket', 18)}Simulate a bucket</button>` : ''}
+        <button class="btn primary huge" data-action="next">${icon('check', 30)}<span>${next ? `Done<small>Next: ${esc(next.name)}</small>` : 'Finish load'}</span></button>
+        <div class="load-actions">
+          <button class="btn" data-action="back" ${s.index === 0 ? 'disabled' : ''}>${icon('back', 18)}Back</button>
+          <button class="btn" data-action="skip">${icon('skip', 18)}Skip</button>
+          <button class="btn ghost danger" data-action="cancel-load">Cancel load</button>
         </div>
         <ol class="steps">
-          ${s.steps.map((st, i) => `<li class="${i < s.index ? 'done' : i === s.index ? 'current' : ''}">
-            <span>${esc(st.name)}</span><span>${i < s.index ? `${fmt(st.actual)} / ` : ''}${fmt(st.target)} lb${st.skipped ? ' (skipped)' : ''}</span></li>`).join('')}
+          ${s.steps.map((st, i) => `<li class="${i < s.index ? 'done' : i === s.index ? 'current' : ''}${st.skipped ? ' skipped' : ''}">
+            <span class="step-dot">${i < s.index ? icon(st.skipped ? 'skip' : 'check', 14) : i + 1}</span>
+            <span class="step-name">${esc(st.name)}</span>
+            <span class="step-val">${i < s.index ? (st.skipped ? 'skipped' : `${fmt(st.actual)} / `) : ''}${st.skipped ? '' : `${fmt(st.target)} lb`}</span></li>`).join('')}
         </ol>
       </section>`;
   },
@@ -263,79 +303,91 @@ const views = {
     const load = data.loads[0];
     if (!load) return views.home();
     return `
-      <div class="card">
-        <h2>Load complete</h2>
-        ${loadDetail(load)}
-        <a class="btn primary big" href="#" data-go="home">Start another load</a>
-      </div>`;
+      ${pageHead('Load complete', `${esc(load.rationName)}${load.penName ? ` · ${esc(load.penName)}` : ''}`)}
+      <div class="card">${loadDetail(load)}</div>
+      <a class="btn primary lg" href="#" data-go="home">${icon('plus', 20)}Start another load</a>`;
   },
 
   rations() {
-    return `<h2>Rations</h2>
-      <p class="hint">Amounts are as-fed lb per head per day, as on the feeding sheet. Ingredients are loaded in the order listed.</p>
+    return `${pageHead('Rations',
+      'Amounts are dry matter (DM) per head per day, as on the feeding sheet. As-fed pounds follow from each ingredient’s DM %. Ingredients load in the order listed.',
+      `<button class="btn primary" data-action="add-ration">${icon('plus', 18)}New ration</button>`)}
       ${data.rations.map((r) => `
-        <div class="card">
-          <div class="row">
-            <input class="grow title-input" data-field="ration.name" data-id="${r.id}" value="${esc(r.name)}" aria-label="Ration name">
-            <button class="btn danger small" data-action="del-ration" data-id="${r.id}">Delete</button>
+        <div class="card ration-card">
+          <div class="card-head">
+            <input class="title-input" data-field="ration.name" data-id="${r.id}" value="${esc(r.name)}" aria-label="Ration name">
+            ${iconBtn('trash', 'del-ration', `data-id="${r.id}"`, `Delete ${esc(r.name)}`, 'danger')}
           </div>
-          <label class="inline">Each load is
-            <input type="number" inputmode="numeric" min="1" step="any" data-field="ration.feedingPct" data-id="${r.id}" value="${esc(r.feedingPct ?? 100)}" aria-label="Percent of daily amount per load">
-            % of the daily amount</label>
+          <div class="feeding-pct">Each load is
+            ${unitInput(`inputmode="decimal" min="1" step="any" data-field="ration.feedingPct" data-id="${r.id}" aria-label="Percent of the daily amount per load"`, '%', r.feedingPct ?? 100)}
+            of the daily amount</div>
           <table class="ration-table">
-            <thead><tr><th>#</th><th>Ingredient</th><th class="num">lb / head / day</th><th></th></tr></thead>
+            <thead><tr><th class="idx">#</th><th>Ingredient</th><th class="num">DM lb</th><th class="num">As-fed lb</th><th class="actions-col"></th></tr></thead>
             <tbody>
-              ${r.items.map((it, idx) => `<tr>
-                <td>${idx + 1}</td>
-                <td><select data-field="item.ingredient" data-id="${r.id}" data-idx="${idx}">${options(data.ingredients, it.ingredientId)}</select></td>
-                <td class="num"><input type="number" inputmode="decimal" min="0" step="any" data-field="item.lbs" data-id="${r.id}" data-idx="${idx}" value="${esc(it.lbsPerHead)}"></td>
-                <td class="nowrap">
-                  <button class="btn small" data-action="item-up" data-id="${r.id}" data-idx="${idx}" aria-label="Move up">▲</button>
-                  <button class="btn small" data-action="item-down" data-id="${r.id}" data-idx="${idx}" aria-label="Move down">▼</button>
-                  <button class="btn small danger" data-action="item-del" data-id="${r.id}" data-idx="${idx}" aria-label="Remove">✕</button>
-                </td></tr>`).join('')}
+              ${r.items.map((it, idx) => {
+                const ing = byId(data.ingredients, it.ingredientId);
+                return `<tr>
+                <td class="idx">${idx + 1}</td>
+                <td class="ing"><select data-field="item.ingredient" data-id="${r.id}" data-idx="${idx}" aria-label="Ingredient">${options(data.ingredients, it.ingredientId)}</select></td>
+                <td class="num dm">${unitInput(`inputmode="decimal" min="0" step="any" data-field="item.dm" data-id="${r.id}" data-idx="${idx}" aria-label="Dry matter lb per head per day"`, 'DM', amount(it.dmLbsPerHead))}</td>
+                <td class="num af">${unitInput(`inputmode="decimal" min="0" step="any" data-field="item.af" data-id="${r.id}" data-idx="${idx}" aria-label="As-fed lb per head per day"`, 'AF', fmt2(itemAsFed(it, ing)).replace(/,/g, ''))}</td>
+                <td class="actions-col">
+                  ${iconBtn('up', 'item-up', `data-id="${r.id}" data-idx="${idx}" ${idx === 0 ? 'disabled' : ''}`, 'Move up')}
+                  ${iconBtn('down', 'item-down', `data-id="${r.id}" data-idx="${idx}" ${idx === r.items.length - 1 ? 'disabled' : ''}`, 'Move down')}
+                  ${iconBtn('trash', 'item-del', `data-id="${r.id}" data-idx="${idx}"`, 'Remove ingredient', 'danger')}
+                </td></tr>`;
+              }).join('')}
             </tbody>
-            <tfoot><tr><td></td><td>Total per head per day</td><td class="num" data-perhead="${r.id}">${fmt1(perHead(r))}</td><td></td></tr></tfoot>
+            <tfoot><tr><td class="idx"></td><td>Per head per day</td>
+              <td class="num" data-total-dm="${r.id}">${fmt2(rationTotals(r, data.ingredients).dm)}</td>
+              <td class="num" data-total-af="${r.id}">${fmt2(rationTotals(r, data.ingredients).asFed)}</td><td class="actions-col"></td></tr></tfoot>
           </table>
-          <p class="ration-cost" data-ration-cost="${r.id}">${rationCostText(r)}</p>
-          <button class="btn" data-action="item-add" data-id="${r.id}" ${data.ingredients.length ? '' : 'disabled'}>+ Add ingredient</button>
-        </div>`).join('')}
-      <button class="btn primary" data-action="add-ration">+ New ration</button>`;
+          <div class="card-foot">
+            <button class="btn ghost" data-action="item-add" data-id="${r.id}" ${data.ingredients.length ? '' : 'disabled'}>${icon('plus', 18)}Add ingredient</button>
+            <span class="ration-cost" data-ration-cost="${r.id}">${rationCostText(r)}</span>
+          </div>
+        </div>`).join('')}`;
   },
 
   ingredients() {
-    return `<h2>Ingredients</h2>
-      <p class="hint">Prices are as-fed $ per ton (2,000 lb). Loads keep the price they were mixed at, so changing a price only affects new loads.</p>
-      <div class="card">
+    const usedIn = (id) => data.rations.filter((r) => r.items.some((i) => i.ingredientId === id)).map((r) => r.name.split(' – ')[0]);
+    return `${pageHead('Ingredients',
+      'Dry matter % and as-fed price per ton (2,000 lb). When you change a DM %, the as-fed pounds in every ration adjust so the cows get the same dry matter. Loads keep the price they were mixed at.',
+      `<button class="btn primary" data-action="add-ingredient">${icon('plus', 18)}New ingredient</button>`)}
+      <div class="card flush">
         <table class="ingredients-table">
-          <thead><tr><th>Ingredient</th><th class="num">$ / ton</th><th></th></tr></thead>
+          <thead><tr><th>Ingredient</th><th class="num">Dry matter</th><th class="num">Price (as fed)</th><th class="actions-col"></th></tr></thead>
           <tbody>
-          ${data.ingredients.map((i) => `<tr>
-            <td class="grow"><input data-field="ingredient.name" data-id="${i.id}" value="${esc(i.name)}" aria-label="Ingredient name"></td>
-            <td class="num"><input type="number" inputmode="decimal" min="0" step="any" placeholder="—" data-field="ingredient.costPerTon" data-id="${i.id}" value="${esc(i.costPerTon ?? '')}" aria-label="Price, $ per ton as fed"></td>
-            <td class="nowrap"><button class="btn small danger" data-action="del-ingredient" data-id="${i.id}">Delete</button></td>
-          </tr>`).join('')}
+          ${data.ingredients.map((i) => {
+            const used = usedIn(i.id);
+            return `<tr>
+            <td class="ing"><input data-field="ingredient.name" data-id="${i.id}" value="${esc(i.name)}" aria-label="Ingredient name">
+              <small class="used-in">${used.length ? `Used in ${esc(used.join(', '))}` : 'Not used in a ration'}</small></td>
+            <td class="num dm">${unitInput(`inputmode="decimal" min="1" max="100" step="any" data-field="ingredient.dmPct" data-id="${i.id}" aria-label="Dry matter percent"`, '% DM', i.dmPct ?? '')}</td>
+            <td class="num price">${unitInput(`inputmode="decimal" min="0" step="any" placeholder="—" data-field="ingredient.costPerTon" data-id="${i.id}" aria-label="Price, dollars per ton as fed"`, '$/ton', i.costPerTon ?? '')}</td>
+            <td class="actions-col">${iconBtn('trash', 'del-ingredient', `data-id="${i.id}"`, `Delete ${esc(i.name)}`, 'danger')}</td>
+          </tr>`;
+          }).join('')}
           </tbody>
         </table>
-        <button class="btn primary" data-action="add-ingredient">+ New ingredient</button>
       </div>`;
   },
 
   pens() {
-    return `<h2>Pens / groups</h2>
-      <div class="card">
-        <table>
-          <thead><tr><th>Name</th><th class="num">Head</th><th>Ration</th><th></th></tr></thead>
+    return `${pageHead('Pens', 'Each pen or group has a head count and the ration it’s fed.',
+      `<button class="btn primary" data-action="add-pen">${icon('plus', 18)}New pen</button>`)}
+      <div class="card flush">
+        <table class="pens-table">
+          <thead><tr><th>Name</th><th class="num">Head</th><th>Ration</th><th class="actions-col"></th></tr></thead>
           <tbody>
             ${data.pens.map((p) => `<tr>
-              <td><input data-field="pen.name" data-id="${p.id}" value="${esc(p.name)}" aria-label="Pen name"></td>
-              <td class="num"><input type="number" inputmode="numeric" min="0" data-field="pen.headCount" data-id="${p.id}" value="${esc(p.headCount)}" aria-label="Head count"></td>
-              <td><select data-field="pen.rationId" data-id="${p.id}">${options(data.rations, p.rationId)}</select></td>
-              <td class="nowrap"><button class="btn small danger" data-action="del-pen" data-id="${p.id}">Delete</button></td>
+              <td class="name"><input data-field="pen.name" data-id="${p.id}" value="${esc(p.name)}" aria-label="Pen name"></td>
+              <td class="num head">${unitInput(`inputmode="numeric" min="0" data-field="pen.headCount" data-id="${p.id}" aria-label="Head count"`, 'hd', p.headCount)}</td>
+              <td class="ration"><select data-field="pen.rationId" data-id="${p.id}" aria-label="Ration">${options(data.rations, p.rationId)}</select></td>
+              <td class="actions-col">${iconBtn('trash', 'del-pen', `data-id="${p.id}"`, `Delete ${esc(p.name)}`, 'danger')}</td>
             </tr>`).join('')}
           </tbody>
         </table>
-        <button class="btn primary" data-action="add-pen">+ New pen</button>
       </div>`;
   },
 
@@ -343,28 +395,27 @@ const views = {
     const m = summarize(data.loads, { period: dash.period, tolOpts: data.settings });
     const perTon = m.cost !== null && m.lbs > 0 ? m.cost / (m.lbs / 2000) : null;
     const tile = (label, value, sub = '') =>
-      `<div class="tile"><span>${label}</span><b>${value}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
+      `<div class="tile"><span class="tile-label">${label}</span><b class="tile-value">${value}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
     const accClass = (a) => (a === null ? '' : a >= 90 ? 'good' : a >= 75 ? 'fair' : 'poor');
     const pill = (a) => `<span class="pill ${accClass(a)}">${pct(a)}</span>`;
+    const section = (title, body) => `<div class="card flush"><h2 class="card-title">${title}</h2><div class="table-scroll">${body}</div></div>`;
     return `
-      <div class="dash-head">
-        <h2>Dashboard</h2>
-        <div class="segmented">${PERIODS.map(([k, v]) =>
-          `<button class="${dash.period === k ? 'on' : ''}" data-action="dash-period" data-period="${k}">${v}</button>`).join('')}</div>
-      </div>
-      ${m.loads ? '' : `<p class="hint">No loads ${dash.period === 'all' ? 'yet' : 'in this period'}. Figures appear here as loads are finished.</p>`}
+      ${pageHead('Dashboard', m.loads ? `${fmt(m.loads)} load${m.loads === 1 ? '' : 's'} since ${shortDate(m.from)}` : '',
+        `<div class="segmented" role="group" aria-label="Period">${PERIODS.map(([k, v]) =>
+          `<button class="${dash.period === k ? 'on' : ''}" data-action="dash-period" data-period="${k}">${v}</button>`).join('')}</div>`)}
+      ${m.loads ? '' : `<div class="card empty"><p>No loads ${dash.period === 'all' ? 'yet' : 'in this period'}. Figures appear here as loads are finished.</p></div>`}
       <div class="tiles">
-        ${tile('Feed cost', money(m.cost, true), perTon !== null ? `${money(perTon)} per ton fed` : 'add prices under Ingredients')}
-        ${tile('Feed mixed', `${fmt(m.lbs)} lb`, `${signed(m.lbs - m.targetLbs)} lb vs target`)}
-        ${tile('Loads', fmt(m.loads), m.skipped ? `${m.skipped} ingredient${m.skipped === 1 ? '' : 's'} skipped` : 'none skipped')}
-        ${tile('Ingredients on target', pill(m.accuracyPct), `average miss ${m.deviationPct === null ? '—' : `${m.deviationPct.toFixed(1)}%`}`)}
+        ${tile('Feed cost', money(m.cost, true), perTon !== null ? `${money(perTon)} per ton fed` : 'Add prices under Ingredients')}
+        ${tile('Feed mixed', `${fmt(m.lbs)}<span class="tile-unit">lb</span>`, `${signed(m.lbs - m.targetLbs)} lb vs target`)}
+        ${tile('Loads', fmt(m.loads), m.skipped ? `${m.skipped} ingredient${m.skipped === 1 ? '' : 's'} skipped` : 'None skipped')}
+        ${tile('On target', pill(m.accuracyPct), `Average miss ${m.deviationPct === null ? '—' : `${m.deviationPct.toFixed(1)}%`}`)}
       </div>
       ${m.unpricedLoads ? `<p class="hint">${m.unpricedLoads} load${m.unpricedLoads === 1 ? ' was' : 's were'} mixed with ingredients that had no price, so their cost is incomplete.</p>` : ''}
 
       <div class="card">
-        <div class="chart-head">
-          <h3>${dash.metric === 'cost' ? 'Feed cost per day' : 'Feed mixed per day (lb)'}</h3>
-          <div class="segmented small">
+        <div class="card-head">
+          <h2 class="card-title">${dash.metric === 'cost' ? 'Feed cost per day' : 'Feed mixed per day (lb)'}</h2>
+          <div class="segmented small" role="group" aria-label="Chart measure">
             <button class="${dash.metric === 'cost' ? 'on' : ''}" data-action="dash-metric" data-metric="cost">Cost</button>
             <button class="${dash.metric === 'lbs' ? 'on' : ''}" data-action="dash-metric" data-metric="lbs">Pounds</button>
           </div>
@@ -372,63 +423,62 @@ const views = {
         ${trendChart(m.daily, dash.metric)}
       </div>
 
-      <div class="card">
-        <h3>By group</h3>
-        <div class="table-scroll"><table>
+      ${section('By group', `<table>
           <thead><tr><th>Group</th><th class="num">Loads</th><th class="num">Lb mixed</th><th class="num">Cost</th><th class="num">$ / head / day</th><th class="num">On target</th></tr></thead>
           <tbody>${m.byGroup.map((g) => `<tr><td>${esc(g.name)}</td><td class="num">${g.loads}</td><td class="num">${fmt(g.lbs)}</td>
             <td class="num">${money(g.cost, true)}</td><td class="num">${money(g.costPerHeadDay)}</td><td class="num">${pill(g.accuracyPct)}</td></tr>`).join('') || emptyRow(6)}</tbody>
-        </table></div>
-      </div>
+        </table>`)}
 
-      <div class="card">
-        <h3>By ingredient</h3>
-        <div class="table-scroll"><table>
-          <thead><tr><th>Ingredient</th><th class="num">Target lb</th><th class="num">Actual lb</th><th class="num">Diff</th><th class="num">Cost</th></tr></thead>
-          <tbody>${m.byIngredient.map((i) => `<tr><td>${esc(i.name)}${i.skipped ? ` <em class="muted">(${i.skipped} skipped)</em>` : ''}</td>
+      ${section('By ingredient', `<table>
+          <thead><tr><th>Ingredient</th><th class="num">Target lb</th><th class="num">Actual lb</th><th class="num">Difference</th><th class="num">Cost</th></tr></thead>
+          <tbody>${m.byIngredient.map((i) => `<tr><td>${esc(i.name)}${i.skipped ? ` <small class="muted">(${i.skipped} skipped)</small>` : ''}</td>
             <td class="num">${fmt(i.target)}</td><td class="num">${fmt(i.actual)}</td>
             <td class="num ${diffClass(i.actual - i.target, i.target)}">${signed(i.actual - i.target)}${i.target ? ` <small>(${signedPct((i.actual - i.target) / i.target * 100)})</small>` : ''}</td>
             <td class="num">${money(i.cost, true)}</td></tr>`).join('') || emptyRow(5)}</tbody>
-        </table></div>
-      </div>
+        </table>`)}
 
-      <div class="card">
-        <h3>By operator</h3>
-        <div class="table-scroll"><table>
+      ${section('By operator', `<table>
           <thead><tr><th>Operator</th><th class="num">Loads</th><th class="num">Lb mixed</th><th class="num">On target</th><th class="num">Average miss</th></tr></thead>
           <tbody>${m.byOperator.map((o) => `<tr><td>${esc(o.name)}</td><td class="num">${o.loads}</td><td class="num">${fmt(o.lbs)}</td>
             <td class="num">${pill(o.accuracyPct)}</td><td class="num">${o.deviationPct === null ? '—' : `${o.deviationPct.toFixed(1)}%`}</td></tr>`).join('') || emptyRow(5)}</tbody>
-        </table></div>
-      </div>
-      <p class="hint">"On target" counts ingredients within ±${data.settings.tolerancePct}% or ±${data.settings.toleranceMinLbs} lb, whichever is larger (change in Settings). Skipped ingredients are not counted.</p>`;
+        </table>`)}
+      <p class="hint">“On target” counts ingredients within ±${data.settings.tolerancePct}% or ±${data.settings.toleranceMinLbs} lb, whichever is larger (change in Settings). Skipped ingredients aren’t counted.</p>`;
   },
 
   history() {
-    return `<h2>Load history</h2>
-      <div class="row">
-        <button class="btn primary" data-action="export-csv" ${data.loads.length ? '' : 'disabled'}>Export CSV</button>
-        ${isManager(user) ? `<button class="btn danger" data-action="clear-history" ${data.loads.length ? '' : 'disabled'}>Clear history</button>` : ''}
-      </div>
-      ${data.loads.length ? '' : '<p class="hint">No loads recorded yet.</p>'}
+    const day = (iso) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const time = (iso) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    return `${pageHead('History', data.loads.length ? `${fmt(data.loads.length)} load${data.loads.length === 1 ? '' : 's'} on this device` : '',
+      `<button class="btn" data-action="export-csv" ${data.loads.length ? '' : 'disabled'}>${icon('download', 18)}Export CSV</button>
+       ${isManager(user) ? `<button class="btn ghost danger" data-action="clear-history" ${data.loads.length ? '' : 'disabled'}>Clear history</button>` : ''}`)}
+      ${data.loads.length ? '' : '<div class="card empty"><p>No loads recorded yet. Finished loads appear here.</p></div>'}
+      <div class="history-list">
       ${data.loads.map((l) => `
-        <details class="card">
+        <details class="history-item">
           <summary>
-            <span><b>${esc(new Date(l.startedAt).toLocaleString())}</b> · ${esc(l.rationName)}${l.penName ? ` · ${esc(l.penName)}` : ''}</span>
-            <span><span class="${diffClass(l.totalActual - l.totalTarget, l.totalTarget)}">${fmt(l.totalActual)} / ${fmt(l.totalTarget)} lb</span>${l.totalCost != null ? ` · ${money(l.totalCost)}` : ''}</span>
+            <span class="h-date"><b>${esc(day(l.startedAt))}</b><small>${esc(time(l.startedAt))}</small></span>
+            <span class="h-main"><b>${esc(l.penName || l.rationName)}</b><small>${esc(l.rationName)}${l.operator ? ` · ${esc(l.operator)}` : ''}</small></span>
+            <span class="h-figs"><span class="${diffClass(l.totalActual - l.totalTarget, l.totalTarget)}">${fmt(l.totalActual)} lb</span><small>${l.totalCost != null ? money(l.totalCost) : `of ${fmt(l.totalTarget)} lb`}</small></span>
+            <span class="h-chev">${icon('down', 18)}</span>
           </summary>
-          ${loadDetail(l)}
-        </details>`).join('')}`;
+          <div class="h-body">${loadDetail(l)}</div>
+        </details>`).join('')}
+      </div>`;
   },
 
   settings() {
     const st = data.settings;
     const field = (key, label, type = 'text', extra = '') =>
       `<label>${label}<input type="${type}" data-field="setting.${key}" value="${esc(st[key])}" ${extra}></label>`;
-    return `<h2>Settings</h2>
+    const unitField = (key, label, unit, extra = '') =>
+      `<label>${label}${unitInput(`data-field="setting.${key}" ${extra}`, unit, st[key])}</label>`;
+    return `${pageHead('Settings')}
       <div class="card">
-        <h3>Scale connection</h3>
-        <div class="status-line"><span class="dot ${scale.status}"></span><span data-live="status-text">${esc(statusText())}</span></div>
-        <div class="form">
+        <div class="card-head">
+          <h2 class="card-title">Scale connection</h2>
+          <span class="status-line"><span class="dot ${scale.status}"></span><span data-live="status-text">${esc(statusText())}</span></span>
+        </div>
+        <div class="form cols-2">
           <label>Connection type
             <select data-field="setting.scaleType">${Object.entries(SCALE_TYPES).map(([k, v]) => `<option value="${k}" ${k === st.scaleType ? 'selected' : ''}>${v}</option>`).join('')}</select>
           </label>
@@ -436,7 +486,7 @@ const views = {
           ${st.scaleType === 'bluetooth' ? field('bleService', 'BLE service UUID') + field('bleCharacteristic', 'BLE notify characteristic UUID') : ''}
           ${st.scaleType === 'websocket' ? field('wsUrl', 'Bridge address (ws://…)') : ''}
           ${['serial', 'bluetooth', 'websocket'].includes(st.scaleType) ? `
-            ${field('parserPattern', 'Weight pattern (regex, optional)', 'text', 'placeholder="default: first number on each line" autocapitalize="off" spellcheck="false"')}
+            ${field('parserPattern', 'Weight pattern (regex, optional)', 'text', 'placeholder="Default: first number on each line" autocapitalize="off" spellcheck="false"')}
             ${field('parserDivisor', 'Divide reading by', 'number', 'min="0" step="any"')}` : ''}
         </div>
         ${st.scaleType === 'bluetooth' ? `<div class="row">
@@ -445,42 +495,39 @@ const views = {
         <div class="row">
           <button class="btn primary" data-action="connect">Connect</button>
           <button class="btn" data-action="disconnect">Disconnect</button>
-          ${scale.simulator ? `<button class="btn" data-action="sim-empty">Empty simulated mixer</button>` : ''}
+          ${scale.simulator ? `<button class="btn ghost" data-action="sim-empty">Empty simulated mixer</button>` : ''}
         </div>
         ${['serial', 'bluetooth', 'websocket'].includes(st.scaleType) ? `
-          <p class="hint">Raw data from the scale (use this to check the weight is read correctly):</p>
+          <p class="hint">Raw data from the scale. Use this to check the weight is read correctly.</p>
           <pre class="rawlog" data-live="rawlog">${esc(scale.recentLines.join('\n')) || '(nothing received yet)'}</pre>
           <p>Reading: <b data-live="gross">—</b> lb</p>` : ''}
       </div>
       <div class="card">
-        <h3>Loading</h3>
-        <div class="form">
-          ${field('autoLockMinutes', 'Lock after this many idle minutes (0 = never)', 'number', 'min="0" step="1"')}
-          ${field('tolerancePct', 'On-target tolerance (%)', 'number', 'min="0" step="0.5"')}
-          ${field('toleranceMinLbs', 'Minimum tolerance (lb)', 'number', 'min="0"')}
-          ${field('mixerCapacityLbs', 'Mixer capacity (lb)', 'number', 'min="0" step="100"')}
-          ${field('roundToLbs', 'Round load amounts to nearest (lb)', 'number', 'min="1" step="1"')}
+        <h2 class="card-title">Loading</h2>
+        <div class="form cols-2">
+          ${unitField('tolerancePct', 'On-target tolerance', '%', 'min="0" step="0.5"')}
+          ${unitField('toleranceMinLbs', 'Minimum tolerance', 'lb', 'min="0"')}
+          ${unitField('mixerCapacityLbs', 'Mixer capacity', 'lb', 'min="0" step="100"')}
+          ${unitField('roundToLbs', 'Round load amounts to nearest', 'lb', 'min="1" step="1"')}
+          ${unitField('autoLockMinutes', 'Lock after idle (0 = never)', 'min', 'min="0" step="1"')}
           <label class="check"><input type="checkbox" data-field="setting.beep" ${st.beep ? 'checked' : ''}> Beep when on target</label>
         </div>
       </div>
       <div class="card">
-        <h3>Backup</h3>
+        <h2 class="card-title">Backup</h2>
         <p class="hint">Data is stored only on this device. Save a backup now and then.</p>
         <div class="row">
-          <button class="btn" data-action="backup">Download backup</button>
-          <label class="btn">Restore backup<input type="file" accept="application/json,.json" data-restore hidden></label>
+          <button class="btn" data-action="backup">${icon('download', 18)}Download backup</button>
+          <label class="btn">${icon('upload', 18)}Restore backup<input type="file" accept="application/json,.json" data-restore hidden></label>
         </div>
       </div>`;
   },
 };
 
-const fmt1 = (n) => (Math.round(n * 10) / 10).toLocaleString('en-US');
-const perHead = (r) => sum(r.items.map((i) => i.lbsPerHead));
-
 function rationCostText(r) {
   const { cost, missing } = rationCostPerHeadDay(r, data.ingredients);
-  if (missing.length === r.items.filter((i) => i.lbsPerHead > 0).length) return 'Feed cost: add prices under Ingredients';
-  return `Feed cost ${money(cost)} per head per day${missing.length ? ` (no price yet for ${missing.join(', ')})` : ''}`;
+  if (missing.length === r.items.filter((i) => i.dmLbsPerHead > 0).length) return 'Add prices under Ingredients to see feed cost';
+  return `<b>${money(cost)}</b> per head per day${missing.length ? ` <span class="muted">(no price yet for ${esc(missing.join(', '))})</span>` : ''}`;
 }
 
 function previewTable() {
@@ -494,14 +541,20 @@ function previewTable() {
   const head = draft.mode === 'head' ? num(draft.headCount) : 0;
   const perHeadDay = totalCost !== null && head > 0 ? totalCost / head / ((ration?.feedingPct ?? 100) / 100) : null;
   return `
-    <table>
-      <thead><tr><th>#</th><th>Ingredient</th><th class="num">Target lb</th><th class="num">Cost</th></tr></thead>
-      <tbody>${targets.map((t, i) => `<tr><td>${i + 1}</td><td>${esc(t.name)}</td><td class="num">${fmt(t.target)}</td><td class="num muted">${money(costs[i], true)}</td></tr>`).join('')}</tbody>
-      <tfoot><tr><td></td><td>Total</td><td class="num">${fmt(total)}</td><td class="num">${money(totalCost, true)}</td></tr></tfoot>
-    </table>
-    ${totalCost !== null ? `<p class="hint">Load cost ${money(totalCost)}${perHeadDay !== null ? ` · ${money(perHeadDay)} per head per day` : ''}${priced.length < costs.length ? ' · some ingredients have no price' : ''}</p>` : ''}
-    ${cap && total > cap ? `<p class="warn">⚠ ${fmt(total)} lb is over the mixer capacity of ${fmt(cap)} lb. Consider ${Math.ceil(total / cap)} smaller loads.</p>` : ''}
-    <button class="btn primary huge" data-action="start" ${total > 0 ? '' : 'disabled'}>Start loading</button>`;
+    <div class="card flush">
+      <div class="card-head padded">
+        <h2 class="card-title">Load plan</h2>
+        <span class="summary-figs"><b>${fmt(total)} lb</b>${totalCost !== null ? `<span>${money(totalCost)}${perHeadDay !== null ? ` · ${money(perHeadDay)}/hd/day` : ''}</span>` : ''}</span>
+      </div>
+      <table class="plan-table">
+        <thead><tr><th class="idx">#</th><th>Ingredient</th><th class="num">Target</th><th class="num">Cost</th></tr></thead>
+        <tbody>${targets.map((t, i) => `<tr><td class="idx">${i + 1}</td><td>${esc(t.name)}</td><td class="num">${fmt(t.target)} <small>lb</small></td><td class="num muted">${money(costs[i], true)}</td></tr>`).join('')}</tbody>
+        <tfoot><tr><td class="idx"></td><td>Total</td><td class="num">${fmt(total)} <small>lb</small></td><td class="num">${money(totalCost, true)}</td></tr></tfoot>
+      </table>
+      ${totalCost !== null && priced.length < costs.length ? '<p class="hint padded">Some ingredients have no price, so the cost is incomplete.</p>' : ''}
+    </div>
+    ${cap && total > cap ? `<div class="callout warn">${icon('alert', 20)}<span>${fmt(total)} lb is over the mixer capacity of ${fmt(cap)} lb. Consider ${Math.ceil(total / cap)} smaller loads.</span></div>` : ''}
+    <button class="btn primary huge" data-action="start" ${total > 0 ? '' : 'disabled'}>${icon('load', 28)}<span>Start loading</span></button>`;
 }
 
 const emptyRow = (cols) => `<tr><td colspan="${cols}" class="muted">No loads in this period.</td></tr>`;
@@ -577,17 +630,21 @@ function diffClass(diff, target) {
 
 function loadDetail(l) {
   return `
-    <p class="hint">${l.operator ? `Operator: ${esc(l.operator)} · ` : ''}${l.headCount ? `${l.headCount} head · ` : ''}finished ${esc(new Date(l.finishedAt).toLocaleTimeString())}</p>
-    <table>
+    <div class="detail-meta">
+      ${l.operator ? `<span>${icon('users', 16)}${esc(l.operator)}</span>` : ''}
+      ${l.headCount ? `<span>${icon('pens', 16)}${l.headCount} head</span>` : ''}
+      <span>${icon('history', 16)}${esc(new Date(l.startedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }))}–${esc(new Date(l.finishedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }))}</span>
+    </div>
+    <div class="table-scroll"><table class="detail-table">
       <thead><tr><th>Ingredient</th><th class="num">Target</th><th class="num">Actual</th><th class="num">Diff</th><th class="num">Cost</th></tr></thead>
       <tbody>${l.items.map((i) => `<tr>
-        <td>${esc(i.name)}${i.skipped ? ' <em>(skipped)</em>' : ''}</td>
+        <td>${esc(i.name)}${i.skipped ? ' <small class="muted">(skipped)</small>' : ''}</td>
         <td class="num">${fmt(i.target)}</td><td class="num">${fmt(i.actual)}</td>
         <td class="num ${diffClass(i.actual - i.target, i.target)}">${signed(i.actual - i.target)}</td>
         <td class="num muted">${money(i.cost, true)}</td></tr>`).join('')}</tbody>
       <tfoot><tr><td>Total</td><td class="num">${fmt(l.totalTarget)}</td><td class="num">${fmt(l.totalActual)}</td>
         <td class="num">${signed(l.totalActual - l.totalTarget)}</td><td class="num">${money(l.totalCost, true)}</td></tr></tfoot>
-    </table>
+    </table></div>
     ${costPerHeadDayText(l)}`;
 }
 
@@ -670,7 +727,7 @@ function updateStatus() {
   if (warn) {
     // Toggle visibility rather than hiding it, so it always takes the same space.
     warn.classList.toggle('off', scale.status === 'connected');
-    warn.textContent = `⚠ Scale: ${statusText()}. Check the reading before tapping Done.`;
+    warn.innerHTML = `${icon('alert', 18)}<span>Scale: ${esc(statusText())}. Check the reading before tapping Done.</span>`;
   }
   document.getElementById('scale-type').textContent =
     scale.type === 'simulator' ? 'SIM' : scale.type === 'manual' ? 'MANUAL' : '';
@@ -875,7 +932,7 @@ const actions = {
     persist(); render();
   },
   'item-add'(el) {
-    byId(data.rations, el.dataset.id).items.push({ ingredientId: data.ingredients[0].id, lbsPerHead: 0 });
+    byId(data.rations, el.dataset.id).items.push({ ingredientId: data.ingredients[0].id, dmLbsPerHead: 0 });
     persist(); render();
   },
   'item-del'(el) {
@@ -886,7 +943,7 @@ const actions = {
   'item-down'(el) { moveItem(el, 1); },
 
   'add-ingredient'() {
-    data.ingredients.push({ id: newId(), name: 'New ingredient' });
+    data.ingredients.push({ id: newId(), name: 'New ingredient', dmPct: 100, costPerTon: null });
     persist(); render();
   },
   async 'del-ingredient'(el) {
@@ -932,6 +989,37 @@ const actions = {
   },
   backup() { download(`feedmixer-backup-${today()}.json`, JSON.stringify(data, null, 2), 'application/json'); },
 };
+
+// Update one ration row's DM / as-fed boxes and the totals without redrawing
+// the page, so the operator's place in the form is kept.
+function refreshRationRow(ration, idx) {
+  const it = ration.items[idx];
+  const ing = byId(data.ingredients, it.ingredientId);
+  const set = (field, v) => {
+    const box = document.querySelector(`[data-field="item.${field}"][data-id="${ration.id}"][data-idx="${idx}"]`);
+    if (box && document.activeElement !== box) box.value = amount(v);
+  };
+  set('dm', it.dmLbsPerHead);
+  const afBox = document.querySelector(`[data-field="item.af"][data-id="${ration.id}"][data-idx="${idx}"]`);
+  if (afBox && document.activeElement !== afBox) afBox.value = fmt2(asFedLbs(it.dmLbsPerHead, dmPctOf(ing))).replace(/,/g, '');
+  const t = rationTotals(ration, data.ingredients);
+  document.querySelector(`[data-total-dm="${ration.id}"]`).textContent = fmt2(t.dm);
+  document.querySelector(`[data-total-af="${ration.id}"]`).textContent = fmt2(t.asFed);
+  document.querySelector(`[data-ration-cost="${ration.id}"]`).innerHTML = rationCostText(ration);
+}
+
+let toastTimer;
+function toast(message) {
+  let el = document.getElementById('toast');
+  if (!el) {
+    el = Object.assign(document.createElement('div'), { id: 'toast', className: 'toast', role: 'status' });
+    document.body.append(el);
+  }
+  el.innerHTML = `${icon('check', 18)}<span>${esc(message)}</span>`;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+}
 
 function recordStep(skip) {
   if (scale.weight === null) return;
@@ -1010,14 +1098,27 @@ document.addEventListener('change', (e) => {
   if (kind === 'ration' && key === 'feedingPct') byId(data.rations, id).feedingPct = num(value) > 0 ? num(value) : 100;
   if (kind === 'item') {
     const ration = byId(data.rations, id);
-    if (key === 'ingredient') ration.items[idx].ingredientId = value;
-    if (key === 'lbs') {
-      ration.items[idx].lbsPerHead = Math.max(0, num(value));
-      document.querySelector(`[data-perhead="${id}"]`).textContent = fmt1(perHead(ration));
-      document.querySelector(`[data-ration-cost="${id}"]`).textContent = rationCostText(ration);
-    }
+    const it = ration.items[idx];
+    if (key === 'ingredient') it.ingredientId = value;
+    // DM and as-fed are two views of one amount: store DM, show both.
+    if (key === 'dm') it.dmLbsPerHead = Math.max(0, num(value));
+    if (key === 'af') it.dmLbsPerHead = dmLbs(Math.max(0, num(value)), dmPctOf(byId(data.ingredients, it.ingredientId)));
+    refreshRationRow(ration, idx);
   }
   if (kind === 'ingredient' && key === 'name') byId(data.ingredients, id).name = value.trim() || 'Unnamed';
+  if (kind === 'ingredient' && key === 'dmPct') {
+    const ing = byId(data.ingredients, id);
+    const v = num(value);
+    if (!(v > 0 && v <= 100)) {
+      el.value = ing.dmPct ?? '';
+      notify('Dry matter must be between 1 and 100%.');
+      return;
+    }
+    const changed = ing.dmPct !== v;
+    ing.dmPct = v;
+    const affected = data.rations.filter((r) => r.items.some((x) => x.ingredientId === id)).length;
+    if (changed && affected) toast(`As-fed amounts updated in ${affected} ration${affected === 1 ? '' : 's'}`);
+  }
   if (kind === 'ingredient' && key === 'costPerTon') byId(data.ingredients, id).costPerTon = value === '' ? null : Math.max(0, num(value));
   if (kind === 'user') {
     const u = byId(data.users, id);
@@ -1128,6 +1229,15 @@ document.addEventListener('visibilitychange', () => {
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch((err) => console.warn('Offline mode unavailable', err));
 }
+
+const NAV = [
+  ['home', 'Load', 'load'], ['rations', 'Rations', 'rations'], ['ingredients', 'Ingredients', 'ingredients'],
+  ['pens', 'Pens', 'pens'], ['history', 'History', 'history'], ['dashboard', 'Dashboard', 'dashboard'],
+  ['users', 'Users', 'users'], ['settings', 'Settings', 'settings'],
+];
+document.querySelector('nav').innerHTML = NAV.map(([r, label, ic]) => `<a href="#" data-go="${r}">${icon(ic, 18)}<span>${label}</span></a>`).join('');
+document.querySelector('.brand').innerHTML = `${brandMark()}<span>Feed Mixer</span>`;
+document.querySelector('#user-chip span').innerHTML = `${icon('lock', 14)}Lock`;
 
 render();
 connectScale(true);

@@ -11,6 +11,33 @@ const priceOf = (ingredient) => {
   return p === null || p === undefined || p === '' || !Number.isFinite(Number(p)) ? null : Number(p);
 };
 
+// Dry matter %, or 100 when it hasn't been entered (as-fed then equals DM).
+export const dmPctOf = (ingredient) => {
+  const p = Number(ingredient?.dmPct);
+  return p > 0 && p <= 100 ? p : 100;
+};
+
+// Rations hold dry-matter lb per head per day (as on the nutritionist's sheet).
+// As-fed lb follows from each ingredient's current DM %, so a new forage test
+// changes how much is loaded while the cows get the same dry matter.
+export const asFedLbs = (dmLbs, dmPct) => (Number(dmLbs) || 0) / (dmPct / 100);
+export const dmLbs = (asFed, dmPct) => (Number(asFed) || 0) * (dmPct / 100);
+
+export function itemAsFed(item, ingredient) {
+  return asFedLbs(item.dmLbsPerHead, dmPctOf(ingredient));
+}
+
+// Per head per day totals for a ration: dry matter (the intake the ration is
+// built for) and as-fed.
+export function rationTotals(ration, ingredients) {
+  const byId = new Map(ingredients.map((i) => [i.id, i]));
+  const items = ration.items.filter((it) => Number(it.dmLbsPerHead) > 0);
+  return {
+    dm: sum(items.map((it) => it.dmLbsPerHead)),
+    asFed: sum(items.map((it) => itemAsFed(it, byId.get(it.ingredientId)))),
+  };
+}
+
 // Feed cost of a ration per head per day, from today's ingredient prices.
 // `missing` lists ingredients with no price (their cost is left out).
 export function rationCostPerHeadDay(ration, ingredients) {
@@ -18,11 +45,11 @@ export function rationCostPerHeadDay(ration, ingredients) {
   let cost = 0;
   const missing = [];
   for (const it of ration.items) {
-    if (!(Number(it.lbsPerHead) > 0)) continue;
+    if (!(Number(it.dmLbsPerHead) > 0)) continue;
     const ing = byId.get(it.ingredientId);
     const price = priceOf(ing);
     if (price === null) missing.push(ing?.name ?? '(deleted ingredient)');
-    else cost += itemCost(it.lbsPerHead, price);
+    else cost += itemCost(itemAsFed(it, ing), price);
   }
   return { cost, missing };
 }
@@ -31,22 +58,27 @@ export const newId = () =>
   Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
 // Scale a ration to a batch, either by head count or by total batch weight.
-// lbsPerHead is as-fed lb per head per day; ration.feedingPct is the share of
+// Items hold dry-matter lb per head per day, converted to as-fed with each
+// ingredient's DM %; ration.feedingPct is the share of
 // the daily amount mixed in one load (50 = two loads a day, 200 = one load for
 // two days). Targets are rounded to the nearest roundTo lb, like a feeding sheet.
 // Returns one target per ingredient, in loading order.
 export function batchTargets(ration, ingredients, { headCount = 0, totalLbs = 0, roundTo = 1 } = {}) {
   const byId = new Map(ingredients.map((i) => [i.id, i]));
-  const items = ration.items.filter((it) => Number(it.lbsPerHead) > 0);
-  const perHead = sum(items.map((it) => it.lbsPerHead));
+  const items = ration.items
+    .filter((it) => Number(it.dmLbsPerHead) > 0)
+    .map((it) => ({ it, ing: byId.get(it.ingredientId) }))
+    .map(({ it, ing }) => ({ it, ing, asFed: itemAsFed(it, ing) }));
+  const perHead = sum(items.map((x) => x.asFed));
   const share = (Number(ration.feedingPct) || 100) / 100;
   const factor = totalLbs > 0 ? (perHead ? totalLbs / perHead : 0) : (Number(headCount) || 0) * share;
   const step = Number(roundTo) > 0 ? Number(roundTo) : 1;
-  return items.map((it) => ({
+  return items.map(({ it, ing, asFed }) => ({
     ingredientId: it.ingredientId,
-    name: byId.get(it.ingredientId)?.name ?? '(deleted ingredient)',
-    target: Math.round((it.lbsPerHead * factor) / step) * step,
-    costPerTon: priceOf(byId.get(it.ingredientId)),
+    name: ing?.name ?? '(deleted ingredient)',
+    target: Math.round((asFed * factor) / step) * step,
+    costPerTon: priceOf(ing),
+    dmPct: dmPctOf(ing),
   }));
 }
 
@@ -85,6 +117,7 @@ export function startSession({
       name: t.name,
       target: t.target,
       costPerTon: t.costPerTon ?? null,
+      dmPct: t.dmPct ?? null,
       start: i === 0 ? startWeight : null,
       actual: null,
       skipped: false,
@@ -117,12 +150,13 @@ export function goBack(session) {
 }
 
 export function finishSession(session, now = new Date()) {
-  const items = session.steps.map(({ name, target, actual, skipped, costPerTon = null }) => ({
+  const items = session.steps.map(({ name, target, actual, skipped, costPerTon = null, dmPct = null }) => ({
     name,
     target,
     actual: actual ?? 0,
     skipped,
     costPerTon,
+    dmPct,
     cost: itemCost(actual ?? 0, costPerTon),
   }));
   const priced = items.filter((i) => i.cost !== null);

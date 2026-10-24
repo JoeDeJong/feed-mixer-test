@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { batchTargets } from '../js/calc.js';
+import { batchTargets, rationTotals } from '../js/calc.js';
 import { defaultData, normalize } from '../js/store.js';
 
 const data = defaultData();
@@ -41,4 +41,45 @@ test('data saved with the old demo rations switches to the farm rations, keeping
   assert.equal(migrated.settings.operator, 'Joe');
   const edited = normalize({ ...migrated, rations: [] });
   assert.deepEqual(edited.rations, [], 'later edits are kept');
+});
+
+test('a new DM % changes the as-fed amount but keeps the dry matter', () => {
+  const d = defaultData();
+  const holstein = d.rations.find((r) => r.id === 'holstein');
+  const before = batchTargets(holstein, d.ingredients, { headCount: 256, roundTo: 1 });
+  d.ingredients.find((i) => i.id === 'cs-1010').dmPct = 34; // wetter silage
+  const after = batchTargets(holstein, d.ingredients, { headCount: 256, roundTo: 1 });
+  const cs = (t) => t.find((x) => x.ingredientId === 'cs-1010');
+  // 18.44 lb DM × 256 head × 50% ÷ 0.34 = 6,942 lb as fed (was 6,442 at 36.64%).
+  assert.equal(cs(before).target, 6442);
+  assert.equal(cs(after).target, 6942);
+  assert.equal(cs(after).dmPct, 34);
+  // Other ingredients are untouched.
+  assert.deepEqual(after.filter((x) => x.ingredientId !== 'cs-1010'), before.filter((x) => x.ingredientId !== 'cs-1010'));
+});
+
+test('rationTotals gives dry matter intake and as-fed per head', () => {
+  const d = defaultData();
+  const t = rationTotals(d.rations.find((r) => r.id === 'holstein'), d.ingredients);
+  assert.equal(t.dm.toFixed(2), '52.91'); // "Inputted DMI: 52.91" on the sheet
+  assert.equal(t.asFed.toFixed(2), '109.12'); // as-fed total on the sheet: 109.1158
+});
+
+test('devices saved with as-fed rations (v2) upgrade to dry matter with identical loads', () => {
+  // A v2 device: as-fed lb per head, no DM %, plus a home-made ingredient.
+  const v2 = {
+    seedVersion: 2,
+    ingredients: [{ id: 'cs-1010', name: 'Corn Silage 10.10.26', costPerTon: 58 }, { id: 'x1', name: 'Salt' }],
+    rations: [{ id: 'r', name: 'R', feedingPct: 50, items: [{ ingredientId: 'cs-1010', lbsPerHead: 50.328 }, { ingredientId: 'x1', lbsPerHead: 0.25 }] }],
+    pens: [], loads: [{ id: 'old' }], users: [], settings: {},
+  };
+  const v3 = normalize(v2);
+  assert.equal(v3.seedVersion, 3);
+  assert.equal(v3.ingredients[0].dmPct, 36.64);
+  assert.equal(v3.ingredients[0].costPerTon, 58);
+  assert.equal(v3.ingredients[1].dmPct, 100);
+  assert.ok(!('lbsPerHead' in v3.rations[0].items[0]));
+  const targets = batchTargets(v3.rations[0], v3.ingredients, { headCount: 256, roundTo: 10 }).map((t) => t.target);
+  assert.deepEqual(targets, [6440, 30]);
+  assert.equal(v3.loads.length, 1);
 });
