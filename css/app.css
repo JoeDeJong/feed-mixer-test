@@ -422,7 +422,10 @@ td small { color: var(--muted); font-weight: 500; }
 .ration-table th:first-child, .ration-table td:first-child { padding-left: 20px; }
 .ration-table th:last-child, .ration-table td:last-child { padding-right: 20px; }
 .ration-table .unit-input { width: 136px; margin-left: auto; }
-.ration-table .unit-input input { padding-right: 40px; }
+.ration-table .unit-input input { padding-right: 34px; }
+.ration-table th small { display: block; margin-top: 2px; font-size: 11px; font-weight: 500; letter-spacing: 0; text-transform: none; }
+/* Captions for the two amounts; the column headers do this job on wider screens. */
+.cell-label { display: none; }
 .ration-cost { font-size: 14.5px; }
 .ration-cost b { font-size: 16px; }
 
@@ -769,8 +772,8 @@ body.is-loading header { justify-content: space-between; }
   .ration-table tfoot td:nth-child(2) { grid-area: lab; }
   .ration-table tfoot td:nth-child(3) { grid-area: dm; }
   .ration-table tfoot td:nth-child(4) { grid-area: af; }
-  .ration-table tfoot td:nth-child(3)::after { content: " DM"; color: var(--muted); font-size: 12.5px; }
-  .ration-table tfoot td:nth-child(4)::after { content: " as fed"; color: var(--muted); font-size: 12.5px; }
+  .ration-table td.dm, .ration-table td.af { display: grid; gap: 4px; text-align: left; }
+  .ration-table .cell-label { display: block; color: var(--muted); font-size: 12px; font-weight: 600; }
   .ration-table tfoot td.actions-col { display: none; }
 
   .ingredients-table tr {

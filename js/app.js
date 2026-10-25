@@ -310,7 +310,7 @@ const views = {
 
   rations() {
     return `${pageHead('Rations',
-      'Amounts are dry matter (DM) per head per day, as on the feeding sheet. As-fed pounds follow from each ingredient’s DM %. Ingredients load in the order listed.',
+      '<b>Dry matter</b> is the feed without its water: what each cow gets per day, as set by the nutritionist (“DM lbs/day” on the feeding sheet). <b>As fed</b> is the wet weight you load: dry matter ÷ the ingredient’s dry matter % from the Ingredients tab. Type either one and the other follows. Ingredients load in the order listed.',
       `<button class="btn primary" data-action="add-ration">${icon('plus', 18)}New ration</button>`)}
       ${data.rations.map((r) => `
         <div class="card ration-card">
@@ -322,15 +322,15 @@ const views = {
             ${unitInput(`inputmode="decimal" min="1" step="any" data-field="ration.feedingPct" data-id="${r.id}" aria-label="Percent of the daily amount per load"`, '%', r.feedingPct ?? 100)}
             of the daily amount</div>
           <table class="ration-table">
-            <thead><tr><th class="idx">#</th><th>Ingredient</th><th class="num">DM lb</th><th class="num">As-fed lb</th><th class="actions-col"></th></tr></thead>
+            <thead><tr><th class="idx">#</th><th>Ingredient</th><th class="num">Dry matter<small>lb per cow per day</small></th><th class="num">As fed<small>lb per cow per day</small></th><th class="actions-col"></th></tr></thead>
             <tbody>
               ${r.items.map((it, idx) => {
                 const ing = byId(data.ingredients, it.ingredientId);
                 return `<tr>
                 <td class="idx">${idx + 1}</td>
                 <td class="ing"><select data-field="item.ingredient" data-id="${r.id}" data-idx="${idx}" aria-label="Ingredient">${options(data.ingredients, it.ingredientId)}</select></td>
-                <td class="num dm">${unitInput(`inputmode="decimal" min="0" step="any" data-field="item.dm" data-id="${r.id}" data-idx="${idx}" aria-label="Dry matter lb per head per day"`, 'DM', amount(it.dmLbsPerHead))}</td>
-                <td class="num af">${unitInput(`inputmode="decimal" min="0" step="any" data-field="item.af" data-id="${r.id}" data-idx="${idx}" aria-label="As-fed lb per head per day"`, 'AF', fmt2(itemAsFed(it, ing)).replace(/,/g, ''))}</td>
+                <td class="num dm"><span class="cell-label">Dry matter</span>${unitInput(`inputmode="decimal" min="0" step="any" data-field="item.dm" data-id="${r.id}" data-idx="${idx}" aria-label="Dry matter, lb per cow per day"`, 'lb', amount(it.dmLbsPerHead))}</td>
+                <td class="num af"><span class="cell-label">As fed</span>${unitInput(`inputmode="decimal" min="0" step="any" data-field="item.af" data-id="${r.id}" data-idx="${idx}" aria-label="As fed, lb per cow per day"`, 'lb', fmt2(itemAsFed(it, ing)).replace(/,/g, ''))}</td>
                 <td class="actions-col">
                   ${iconBtn('up', 'item-up', `data-id="${r.id}" data-idx="${idx}" ${idx === 0 ? 'disabled' : ''}`, 'Move up')}
                   ${iconBtn('down', 'item-down', `data-id="${r.id}" data-idx="${idx}" ${idx === r.items.length - 1 ? 'disabled' : ''}`, 'Move down')}
@@ -338,9 +338,9 @@ const views = {
                 </td></tr>`;
               }).join('')}
             </tbody>
-            <tfoot><tr><td class="idx"></td><td>Per head per day</td>
-              <td class="num" data-total-dm="${r.id}">${fmt2(rationTotals(r, data.ingredients).dm)}</td>
-              <td class="num" data-total-af="${r.id}">${fmt2(rationTotals(r, data.ingredients).asFed)}</td><td class="actions-col"></td></tr></tfoot>
+            <tfoot><tr><td class="idx"></td><td>Total per cow per day</td>
+              <td class="num dm"><span class="cell-label">Dry matter intake</span><span><span data-total-dm="${r.id}">${fmt2(rationTotals(r, data.ingredients).dm)}</span> <small>lb</small></span></td>
+              <td class="num af"><span class="cell-label">As fed</span><span><span data-total-af="${r.id}">${fmt2(rationTotals(r, data.ingredients).asFed)}</span> <small>lb</small></span></td><td class="actions-col"></td></tr></tfoot>
           </table>
           <div class="card-foot">
             <button class="btn ghost" data-action="item-add" data-id="${r.id}" ${data.ingredients.length ? '' : 'disabled'}>${icon('plus', 18)}Add ingredient</button>
@@ -356,7 +356,7 @@ const views = {
       `<button class="btn primary" data-action="add-ingredient">${icon('plus', 18)}New ingredient</button>`)}
       <div class="card flush">
         <table class="ingredients-table">
-          <thead><tr><th>Ingredient</th><th class="num">Dry matter</th><th class="num">Price (as fed)</th><th class="actions-col"></th></tr></thead>
+          <thead><tr><th>Ingredient</th><th class="num">Dry matter %</th><th class="num">Price (as fed)</th><th class="actions-col"></th></tr></thead>
           <tbody>
           ${data.ingredients.map((i) => {
             const used = usedIn(i.id);
