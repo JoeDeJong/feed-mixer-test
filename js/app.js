@@ -312,64 +312,70 @@ const views = {
     return `${pageHead('Rations',
       '<b>Dry matter</b> is the feed without its water: what each cow gets per day, as set by the nutritionist (“DM lbs/day” on the feeding sheet). <b>As fed</b> is the wet weight you load: dry matter ÷ the ingredient’s dry matter % from the Ingredients tab. Type either one and the other follows. Ingredients load in the order listed.',
       `<button class="btn primary" data-action="add-ration">${icon('plus', 18)}New ration</button>`)}
-      ${data.rations.map((r) => `
-        <div class="card ration-card">
+      ${data.rations.map((r) => {
+        const t = rationTotals(r, data.ingredients);
+        const c = rationCost(r);
+        return `
+        <section class="card ration-card">
           <div class="card-head">
             <input class="title-input" data-field="ration.name" data-id="${r.id}" value="${esc(r.name)}" aria-label="Ration name">
             ${iconBtn('trash', 'del-ration', `data-id="${r.id}"`, `Delete ${esc(r.name)}`, 'danger')}
           </div>
-          <div class="feeding-pct">Each load is
-            ${unitInput(`inputmode="decimal" min="1" step="any" data-field="ration.feedingPct" data-id="${r.id}" aria-label="Percent of the daily amount per load"`, '%', r.feedingPct ?? 100)}
-            of the daily amount</div>
-          <table class="ration-table">
-            <thead><tr><th class="idx">#</th><th>Ingredient</th><th class="num">Dry matter<small>lb per cow per day</small></th><th class="num">As fed<small>lb per cow per day</small></th><th class="actions-col"></th></tr></thead>
-            <tbody>
-              ${r.items.map((it, idx) => {
-                const ing = byId(data.ingredients, it.ingredientId);
-                return `<tr>
-                <td class="idx">${idx + 1}</td>
-                <td class="ing"><select data-field="item.ingredient" data-id="${r.id}" data-idx="${idx}" aria-label="Ingredient">${options(data.ingredients, it.ingredientId)}</select></td>
-                <td class="num dm"><span class="cell-label">Dry matter</span>${unitInput(`inputmode="decimal" min="0" step="any" data-field="item.dm" data-id="${r.id}" data-idx="${idx}" aria-label="Dry matter, lb per cow per day"`, 'lb', amount(it.dmLbsPerHead))}</td>
-                <td class="num af"><span class="cell-label">As fed</span>${unitInput(`inputmode="decimal" min="0" step="any" data-field="item.af" data-id="${r.id}" data-idx="${idx}" aria-label="As fed, lb per cow per day"`, 'lb', fmt2(itemAsFed(it, ing)).replace(/,/g, ''))}</td>
-                <td class="actions-col">
-                  ${iconBtn('up', 'item-up', `data-id="${r.id}" data-idx="${idx}" ${idx === 0 ? 'disabled' : ''}`, 'Move up')}
-                  ${iconBtn('down', 'item-down', `data-id="${r.id}" data-idx="${idx}" ${idx === r.items.length - 1 ? 'disabled' : ''}`, 'Move down')}
-                  ${iconBtn('trash', 'item-del', `data-id="${r.id}" data-idx="${idx}"`, 'Remove ingredient', 'danger')}
-                </td></tr>`;
-              }).join('')}
-            </tbody>
-            <tfoot><tr><td class="idx"></td><td>Total per cow per day</td>
-              <td class="num dm"><span class="cell-label">Dry matter intake</span><span><span data-total-dm="${r.id}">${fmt2(rationTotals(r, data.ingredients).dm)}</span> <small>lb</small></span></td>
-              <td class="num af"><span class="cell-label">As fed</span><span><span data-total-af="${r.id}">${fmt2(rationTotals(r, data.ingredients).asFed)}</span> <small>lb</small></span></td><td class="actions-col"></td></tr></tfoot>
-          </table>
-          <div class="card-foot">
-            <button class="btn ghost" data-action="item-add" data-id="${r.id}" ${data.ingredients.length ? '' : 'disabled'}>${icon('plus', 18)}Add ingredient</button>
-            <span class="ration-cost" data-ration-cost="${r.id}">${rationCostText(r)}</span>
+          <div class="ration-summary">
+            <div class="mini-stat"><span>Dry matter intake</span><b data-total-dm="${r.id}">${fmt2(t.dm)}</b><small>lb per cow per day</small></div>
+            <div class="mini-stat"><span>As fed</span><b data-total-af="${r.id}">${fmt2(t.asFed)}</b><small>lb per cow per day</small></div>
+            <div class="mini-stat"><span>Feed cost</span><b data-ration-cost="${r.id}">${c.value}</b><small data-ration-cost-note="${r.id}">${c.note}</small></div>
+            <label class="mini-stat edit"><span>Each load</span>
+              ${unitInput(`inputmode="decimal" min="1" step="any" data-field="ration.feedingPct" data-id="${r.id}" aria-label="Percent of the daily amount per load"`, '%', r.feedingPct ?? 100)}
+              <small>of the daily amount</small></label>
           </div>
-        </div>`).join('')}`;
+          <div class="ing-list-head" aria-hidden="true"><span>#</span><span>Ingredient</span><span>Dry matter<small>lb per cow per day</small></span><span>As fed<small>lb per cow per day</small></span><span></span></div>
+          <ol class="ing-rows">
+            ${r.items.map((it, idx) => {
+              const ing = byId(data.ingredients, it.ingredientId);
+              return `<li class="ing-row">
+              <span class="step-no">${idx + 1}</span>
+              <label class="ing-pick" title="Change ingredient">
+                <span class="ing-text" data-ing-name="${r.id}:${idx}">${esc(ing?.name ?? 'Choose ingredient')}</span>${icon('down', 16)}
+                <select data-field="item.ingredient" data-id="${r.id}" data-idx="${idx}" aria-label="Ingredient ${idx + 1}">${options(data.ingredients, it.ingredientId)}</select>
+              </label>
+              <div class="ing-amts">
+                <label class="ing-amt"><span class="cell-label">Dry matter</span>${unitInput(`inputmode="decimal" min="0" step="any" data-field="item.dm" data-id="${r.id}" data-idx="${idx}" aria-label="Dry matter, lb per cow per day"`, 'lb', amount(it.dmLbsPerHead))}</label>
+                <label class="ing-amt"><span class="cell-label">As fed</span>${unitInput(`inputmode="decimal" min="0" step="any" data-field="item.af" data-id="${r.id}" data-idx="${idx}" aria-label="As fed, lb per cow per day"`, 'lb', fmt2(itemAsFed(it, ing)).replace(/,/g, ''))}</label>
+              </div>
+              <div class="ing-actions">
+                ${iconBtn('up', 'item-up', `data-id="${r.id}" data-idx="${idx}" ${idx === 0 ? 'disabled' : ''}`, 'Move up')}
+                ${iconBtn('down', 'item-down', `data-id="${r.id}" data-idx="${idx}" ${idx === r.items.length - 1 ? 'disabled' : ''}`, 'Move down')}
+                ${iconBtn('trash', 'item-del', `data-id="${r.id}" data-idx="${idx}"`, 'Remove ingredient', 'danger')}
+              </div>
+            </li>`;
+            }).join('')}
+          </ol>
+          <button class="btn ghost add-row" data-action="item-add" data-id="${r.id}" ${data.ingredients.length ? '' : 'disabled'}>${icon('plus', 18)}Add ingredient</button>
+        </section>`;
+      }).join('')}`;
   },
 
   ingredients() {
     const usedIn = (id) => data.rations.filter((r) => r.items.some((i) => i.ingredientId === id)).map((r) => r.name.split(' – ')[0]);
     return `${pageHead('Ingredients',
-      'Dry matter % and as-fed price per ton (2,000 lb). When you change a DM %, the as-fed pounds in every ration adjust so the cows get the same dry matter. Loads keep the price they were mixed at.',
+      'Dry matter % and as-fed price per ton (2,000 lb). When you change a dry matter %, the as-fed pounds in every ration adjust so the cows get the same dry matter. Loads keep the price they were mixed at.',
       `<button class="btn primary" data-action="add-ingredient">${icon('plus', 18)}New ingredient</button>`)}
-      <div class="card flush">
-        <table class="ingredients-table">
-          <thead><tr><th>Ingredient</th><th class="num">Dry matter %</th><th class="num">Price (as fed)</th><th class="actions-col"></th></tr></thead>
-          <tbody>
-          ${data.ingredients.map((i) => {
-            const used = usedIn(i.id);
-            return `<tr>
-            <td class="ing"><input data-field="ingredient.name" data-id="${i.id}" value="${esc(i.name)}" aria-label="Ingredient name">
-              <small class="used-in">${used.length ? `Used in ${esc(used.join(', '))}` : 'Not used in a ration'}</small></td>
-            <td class="num dm">${unitInput(`inputmode="decimal" min="1" max="100" step="any" data-field="ingredient.dmPct" data-id="${i.id}" aria-label="Dry matter percent"`, '% DM', i.dmPct ?? '')}</td>
-            <td class="num price">${unitInput(`inputmode="decimal" min="0" step="any" placeholder="—" data-field="ingredient.costPerTon" data-id="${i.id}" aria-label="Price, dollars per ton as fed"`, '$/ton', i.costPerTon ?? '')}</td>
-            <td class="actions-col">${iconBtn('trash', 'del-ingredient', `data-id="${i.id}"`, `Delete ${esc(i.name)}`, 'danger')}</td>
-          </tr>`;
-          }).join('')}
-          </tbody>
-        </table>
+      <div class="ing-grid">
+        ${data.ingredients.map((i) => {
+          const used = usedIn(i.id);
+          return `<section class="ing-tile">
+            <div class="ing-tile-head">
+              <input class="title-input" data-field="ingredient.name" data-id="${i.id}" value="${esc(i.name)}" aria-label="Ingredient name">
+              ${iconBtn('trash', 'del-ingredient', `data-id="${i.id}"`, `Delete ${esc(i.name)}`, 'danger')}
+            </div>
+            <p class="used-in">${used.length ? `${icon('rations', 14)}<span>${esc(used.join(' · '))}</span>` : '<span>Not used in a ration</span>'}</p>
+            <div class="ing-tile-fields">
+              <label><span>Dry matter</span>${unitInput(`inputmode="decimal" min="1" max="100" step="any" data-field="ingredient.dmPct" data-id="${i.id}" aria-label="Dry matter percent"`, '%', i.dmPct ?? '')}</label>
+              <label><span>Price, as fed</span>${unitInput(`inputmode="decimal" min="0" step="any" placeholder="—" data-field="ingredient.costPerTon" data-id="${i.id}" aria-label="Price, dollars per ton as fed"`, '$/ton', i.costPerTon ?? '')}</label>
+            </div>
+          </section>`;
+        }).join('')}
       </div>`;
   },
 
@@ -524,10 +530,11 @@ const views = {
   },
 };
 
-function rationCostText(r) {
+// Feed cost per cow per day for a ration's summary strip.
+function rationCost(r) {
   const { cost, missing } = rationCostPerHeadDay(r, data.ingredients);
-  if (missing.length === r.items.filter((i) => i.dmLbsPerHead > 0).length) return 'Add prices under Ingredients to see feed cost';
-  return `<b>${money(cost)}</b> per head per day${missing.length ? ` <span class="muted">(no price yet for ${esc(missing.join(', '))})</span>` : ''}`;
+  if (missing.length === r.items.filter((i) => i.dmLbsPerHead > 0).length) return { value: '—', note: 'Add prices under Ingredients' };
+  return { value: money(cost), note: missing.length ? `per cow per day · ${missing.length} without a price` : 'per cow per day' };
 }
 
 function previewTable() {
@@ -1005,7 +1012,11 @@ function refreshRationRow(ration, idx) {
   const t = rationTotals(ration, data.ingredients);
   document.querySelector(`[data-total-dm="${ration.id}"]`).textContent = fmt2(t.dm);
   document.querySelector(`[data-total-af="${ration.id}"]`).textContent = fmt2(t.asFed);
-  document.querySelector(`[data-ration-cost="${ration.id}"]`).innerHTML = rationCostText(ration);
+  const c = rationCost(ration);
+  document.querySelector(`[data-ration-cost="${ration.id}"]`).textContent = c.value;
+  document.querySelector(`[data-ration-cost-note="${ration.id}"]`).textContent = c.note;
+  const name = document.querySelector(`[data-ing-name="${ration.id}:${idx}"]`);
+  if (name) name.textContent = ing?.name ?? 'Choose ingredient';
 }
 
 let toastTimer;
